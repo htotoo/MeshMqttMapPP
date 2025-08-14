@@ -1,4 +1,10 @@
 <?php
+
+// --- NO CACHE HEADERS ---
+header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+header("Cache-Control: post-check=0, pre-check=0", false);
+header("Pragma: no-cache");
+header("Expires: 0");
 // --- CONFIGURATION ---
 // Updated database path
 $db_path = '/home/totoo/projects/meshlogger/build/nodes.db';
@@ -39,7 +45,7 @@ try {
             'long_name' => htmlspecialchars($row['long_name'] ?? 'N/A', ENT_QUOTES, 'UTF-8'),
             'latitude' => $row['latitude'] / 10000000.0,
             'longitude' => $row['longitude'] / 10000000.0,
-            'last_updated' => htmlspecialchars($row['last_updated'] ?? 'N/A', ENT_QUOTES, 'UTF-8'),
+            'last_updated' => $row['last_updated'], // Pass the raw timestamp
             'battery_level' => $row['battery_level'] ?? 0,
             'temperature' => $row['temperature'] ?? 0.0
         ];
@@ -54,6 +60,7 @@ try {
     foreach ($chat_rows as $chat_row) {
         $sender_id = $chat_row['node_id'];
         
+        // --- Improved sender lookup logic ---
         $sender_display = '!' . substr(sprintf('%x', $sender_id), -8); // Default to hex
         $has_coords = false;
 
@@ -305,14 +312,17 @@ try {
                 </div>
                 <div id="node-list"></div>
             </div>
+            <!-- Toggle button is now outside the collapsible panel -->
             <div id="panel-toggle-bar">
                 <span id="panel-toggle-btn">&laquo;</span>
             </div>
             <div id="map"></div>
         </div>
+        <!-- The bottom panel is open by default (no 'collapsed' class) -->
         <div id="bottom-panel">
             <div id="chat-header">
                 <span>Chat / Log</span>
+                <!-- The icon indicates the action to take: collapse the panel -->
                 <span id="chat-toggle-btn">▼</span>
             </div>
             <div id="chat-content">
@@ -341,6 +351,31 @@ try {
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 
     <script>
+        /**
+         * Converts a timestamp into a human-readable relative time string using the client's clock.
+         * @param {string} timestamp The timestamp from the database (e.g., "2024-01-01 12:00:00").
+         * @returns {string} The formatted time ago string (e.g., "5 perce").
+         */
+        function timeAgo(timestamp) {
+            if (!timestamp) return 'Soha';
+            // Append ' UTC' to ensure the browser parses it as a UTC timestamp, not local.
+            const ago = new Date(timestamp + ' UTC');
+            const now = new Date();
+            const diffSeconds = Math.round((now - ago) / 1000);
+
+            if (diffSeconds < 0) return 'a jövőben';
+            if (diffSeconds < 60) return `${diffSeconds} sec`;
+            
+            const diffMinutes = Math.round(diffSeconds / 60);
+            if (diffMinutes < 60) return `${diffMinutes} min`;
+            
+            const diffHours = Math.round(diffMinutes / 60);
+            if (diffHours < 24) return `${diffHours} hours`;
+            
+            const diffDays = Math.round(diffHours / 24);
+            return `${diffDays} days`;
+        }
+
         // --- DOM ELEMENTS ---
         const mapElement = document.getElementById('map');
         const nodeListPanel = document.getElementById('node-list-panel');
@@ -376,6 +411,7 @@ try {
 
         chatHeader.addEventListener('click', () => {
             const isCollapsed = bottomPanel.classList.toggle('collapsed');
+            // If it's now collapsed, show the 'expand' icon (up arrow). Otherwise, show 'collapse' icon.
             chatToggleBtn.innerHTML = isCollapsed ? '▲' : '▼';
             setTimeout(() => map.invalidateSize(), 300);
         });
@@ -385,7 +421,7 @@ try {
             if (node.latitude !== 0 || node.longitude !== 0) {
                 const marker = L.marker([node.latitude, node.longitude]);
                 
-                let popupContent = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Updated: ${node.last_updated}`;
+                let popupContent = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}`;
                 if (node.battery_level > 0) {
                     popupContent += `<br>🔋 ${node.battery_level}%`;
                 }
@@ -424,7 +460,7 @@ try {
                     <div>
                         <b>${node.long_name}</b> 
                         (${node.short_name} <span class="node-id-hex">${node.node_id_hex}</span>)
-                        <small>Last Updated: ${node.last_updated}</small>
+                        <small>Last Seen: ${timeAgo(node.last_updated)}</small>
                     </div>
                     ${statsHtml ? `<div class="node-stats">${statsHtml}</div>` : ''}
                 `;
