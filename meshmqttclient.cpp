@@ -13,7 +13,7 @@ MeshMqttClient::~MeshMqttClient() {
 bool MeshMqttClient::init() {
     int rc;
 
-    if ((rc = MQTTClient_create(&client, ADDRESS, CLIENTID,
+    if ((rc = MQTTClient_create(&client, address.c_str(), CLIENTID,
                                 MQTTCLIENT_PERSISTENCE_NONE, NULL)) != MQTTCLIENT_SUCCESS) {
         printf("Failed to connect. Reason: %d\n", rc);
         return false;
@@ -27,13 +27,14 @@ bool MeshMqttClient::init() {
     conn_opts = MQTTClient_connectOptions_initializer;
     conn_opts.keepAliveInterval = 20;
     conn_opts.cleansession = 1;
-    conn_opts.username = "meshdev";
-    conn_opts.password = "large4cats";
+    conn_opts.username = user.c_str();
+    conn_opts.password = pass.c_str();
     return true;
 }
 
 void MeshMqttClient::loop() {
     int rc;
+    if (!client) return;
     if (!MQTTClient_isConnected(client)) {
         printf("Try to connect...\n");
 
@@ -44,7 +45,7 @@ void MeshMqttClient::loop() {
             return;  // Vissza a ciklus elejére
         }
 
-        printf("MQTT connect ok!\n");
+        printf("MQTT connect ok! %s\n", address.c_str());
 
         // Sikeres csatlakozás után újra fel kell iratkozni a témakörökre!
         printf("Subscribe to topics...\n");

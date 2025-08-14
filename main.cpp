@@ -18,6 +18,8 @@
 std::atomic<bool> running(true);
 
 MeshMqttClient localClient;
+MeshMqttClient mainClient;
+MeshMqttClient liamClient;
 NodeDb nodeDb("nodes.db");
 
 class MessageIdTracker {
@@ -111,6 +113,10 @@ void handle_signal(int signal) {
 int main(int argc, char* argv[]) {
     signal(SIGINT, handle_signal);
 
+    mainClient.set_address("tcp://mqtt.meshtastic.org:1883");
+    liamClient.set_address("tcp://mqtt.meshtastic.liamcottle.net:1883");
+    liamClient.set_user_pass("uplink", "uplink");
+
     localClient.setOnMessage(m_on_message);
     localClient.setOnPositionMessage(m_on_position_message);
     localClient.setOnWaypointMessage(m_on_waypoint_message);
@@ -118,10 +124,28 @@ int main(int argc, char* argv[]) {
     localClient.setOnTelemetryDevice(m_on_telemetry_device);
     localClient.setOnTelemetryEnvironment(m_on_telemetry_environment);
     localClient.setOnTraceroute(m_on_traceroute);
+    mainClient.setOnMessage(m_on_message);
+    mainClient.setOnPositionMessage(m_on_position_message);
+    mainClient.setOnWaypointMessage(m_on_waypoint_message);
+    mainClient.setOnNodeInfoMessage(m_on_node_info);
+    mainClient.setOnTelemetryDevice(m_on_telemetry_device);
+    mainClient.setOnTelemetryEnvironment(m_on_telemetry_environment);
+    mainClient.setOnTraceroute(m_on_traceroute);
+    liamClient.setOnMessage(m_on_message);
+    liamClient.setOnPositionMessage(m_on_position_message);
+    liamClient.setOnWaypointMessage(m_on_waypoint_message);
+    liamClient.setOnNodeInfoMessage(m_on_node_info);
+    liamClient.setOnTelemetryDevice(m_on_telemetry_device);
+    liamClient.setOnTelemetryEnvironment(m_on_telemetry_environment);
+    liamClient.setOnTraceroute(m_on_traceroute);
 
+    mainClient.init();
     localClient.init();
+    liamClient.init();
     while (running) {
         localClient.loop();
+        mainClient.loop();
+        liamClient.loop();
         sleep(1);
     }
 

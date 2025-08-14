@@ -21,7 +21,6 @@
 #include "meshtastic/telemetry.pb.h"
 #include "meshtastic/mqtt.pb.h"
 
-#define ADDRESS "tcp://127.0.0.1:1883"
 #define CLIENTID "MeshLoggerClient"
 #define QOS 1
 #define TIMEOUT 10000L
@@ -33,6 +32,13 @@ class MeshMqttClient {
     ~MeshMqttClient();
     bool init();
     void loop();
+    void set_address(const std::string& address) {
+        this->address = address;
+    }
+    void set_user_pass(const std::string& user, const std::string& pass) {
+        this->user = user;
+        this->pass = pass;
+    }
     using OnMessageCallback = void (*)(MC_Header& header, MC_TextMessage& message);
     using OnPositionMessageCallback = void (*)(MC_Header& header, MC_Position& position, bool needReply);
     using OnNodeInfoCallback = void (*)(MC_Header& header, MC_NodeInfo& nodeinfo, bool needReply);
@@ -103,6 +109,9 @@ class MeshMqttClient {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};  // default channel key
 
+    std::string address = "tcp://127.0.0.1:1883";
+    std::string user = "meshdev";
+    std::string pass = "large4cats";
     MQTTClient_connectOptions conn_opts;
     char topic1[20] = "msh/EU_433/HU/2/e/#";
     char topic2[20] = "msh/EU_868/HU/2/e/#";
