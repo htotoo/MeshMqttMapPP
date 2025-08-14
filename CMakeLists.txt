@@ -16,6 +16,9 @@ find_library(PAHO_MQTT_LIBRARY NAMES paho-mqtt3c)
 if(NOT PAHO_MQTT_INCLUDE_DIR OR NOT PAHO_MQTT_LIBRARY)
     message(FATAL_ERROR "Paho MQTT library or headers not found. Please ensure 'libpaho-mqtt-dev' is installed.")
 endif()
+# Find SQLite3
+find_path(SQLITE3_INCLUDE_DIR NAMES sqlite3.h)
+find_library(SQLITE3_LIBRARY NAMES sqlite3)
 
 # Find the standard Threads library
 find_package(Threads REQUIRED)
@@ -51,6 +54,7 @@ file(GLOB NANOPB_SOURCES "pb_*.c")
 add_executable(meshlogger
     main.cpp
     meshmqttclient.cpp
+    nodedb.cpp
 	unishox2.cpp
     ${MESHTASTIC_SOURCES}
     ${NANOPB_SOURCES}
@@ -65,6 +69,7 @@ target_include_directories(meshlogger PRIVATE
     # "${CMAKE_CURRENT_SOURCE_DIR}/nanopb"
     "${PAHO_MQTT_INCLUDE_DIR}"
     "${MBEDTLS_INCLUDE_DIR}"
+    "${SQLITE3_INCLUDE_DIR}"
 )
 
 target_link_libraries(meshlogger PRIVATE
@@ -74,6 +79,7 @@ target_link_libraries(meshlogger PRIVATE
     "${MBEDTLS_LIBRARY}"
     "${MBEDX509_LIBRARY}"
     "${MBEDCRYPTO_LIBRARY}"
+    "${SQLITE3_LIBRARY}"
 )
 
 # --- Optional: Install command ---

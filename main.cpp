@@ -1,3 +1,5 @@
+
+#include <signal.h>
 #include <string>
 #include <inttypes.h>
 #include "mbedtls/aes.h"
@@ -9,8 +11,12 @@
 #include <iostream>
 #include <sqlite3.h>
 #include "meshmqttclient.hpp"
+#include "nodedb.hpp"
+
+std::atomic<bool> running(true);
 
 MeshMqttClient localClient;
+NodeDb nodeDb("nodes.db");
 
 void m_on_message(MC_Header& header, MC_TextMessage& message) {
     printf("Message from node 0x%08" PRIx32 ": %s\n", header.srcnode, message.text.c_str());
@@ -18,10 +24,12 @@ void m_on_message(MC_Header& header, MC_TextMessage& message) {
 
 void m_on_position_message(MC_Header& header, MC_Position& position, bool needReply) {
     printf("Position from node 0x%08" PRIx32 ": Lat: %d, Lon: %d, Alt: %d, Speed: %d\n", header.srcnode, position.latitude_i, position.longitude_i, position.altitude, position.ground_speed);
+    nodeDb.setNodePosition(header.srcnode, position.latitude_i, position.longitude_i, position.altitude);
 }
 
 void m_on_node_info(MC_Header& header, MC_NodeInfo& nodeinfo, bool needReply) {
     printf("Node Info from node 0x%08" PRIx32 ": ID: %s, Short Name: %s, Long Name: %s\n", header.srcnode, nodeinfo.id, nodeinfo.short_name, nodeinfo.long_name);
+    nodeDb.setNodeInfo(header.srcnode, nodeinfo.short_name, nodeinfo.long_name);
 }
 
 void m_on_waypoint_message(MC_Header& header, MC_Waypoint& waypoint) {
@@ -43,7 +51,16 @@ void m_on_traceroute(MC_Header& header, MC_RouteDiscovery& route, bool for_me, b
     }
 }
 
+void handle_signal(int signal) {
+    if (signal == SIGINT) {
+        printf("\nCaught SIGINT, exiting...\n");
+        running = false;
+    }
+}
+
 int main(int argc, char* argv[]) {
+    signal(SIGINT, handle_signal);
+
     localClient.setOnMessage(m_on_message);
     localClient.setOnPositionMessage(m_on_position_message);
     localClient.setOnWaypointMessage(m_on_waypoint_message);
@@ -53,7 +70,7 @@ int main(int argc, char* argv[]) {
     localClient.setOnTraceroute(m_on_traceroute);
 
     localClient.init();
-    while (true) {
+    while (running) {
         localClient.loop();
         sleep(1);
     }

@@ -210,24 +210,24 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len) {
         if (ret >= 0) {
             // extract the want_response from bitfield
             decodedtmp.want_response = false;  // packet.want_response;
-            printf("PortNum: %d  PacketId: %lu  Src: %lu\r\n", decodedtmp.portnum, header.packet_id, header.srcnode);
+            /*printf("PortNum: %d  PacketId: %lu  Src: %lu\r\n", decodedtmp.portnum, header.packet_id, header.srcnode);
             printf("Want ack: %d\r\n", header.want_ack ? 1 : 0);
             printf("Want Response: %d\r\n", decodedtmp.want_response);
             printf("Request ID: %" PRIu32 "\r\n", decodedtmp.request_id);
-            printf("Reply ID: %" PRIu32 "\r\n", decodedtmp.reply_id);
+            printf("Reply ID: %" PRIu32 "\r\n", decodedtmp.reply_id);*/
             header.request_id = decodedtmp.request_id;
             header.reply_id = decodedtmp.reply_id;
             // Process the decoded data as needed https://github.com/meshtastic/protobufs/blob/master/meshtastic/portnums.proto
             if (decodedtmp.portnum == 0) {
-                printf("Received an unknown packet\r\n");
+                // printf("Received an unknown packet\r\n");
             } else if (decodedtmp.portnum == 1) {
-                printf("Received a message packet\r\n");
-                // payload: utf8 text
+                // printf("Received a message packet\r\n");
+                //  payload: utf8 text
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(decodedtmp.payload.bytes), decodedtmp.payload.size), (uint8_t)ret, MC_MESSAGE_TYPE_TEXT};
                 intOnMessage(header, msg);
             } else if (decodedtmp.portnum == 2) {
-                printf("Received a remote hardware packet\r\n");
-                // payload: protobuf HardwareMessage - NOT INTERESTED IN YET
+                // printf("Received a remote hardware packet\r\n");
+                //  payload: protobuf HardwareMessage - NOT INTERESTED IN YET
                 /*meshtastic_HardwareMessage hardware_msg = {};
                 if (pb_decode_from_bytes(decodedtmp.payload.bytes, decodedtmp.payload.size, &meshtastic_HardwareMessage_msg, &hardware_msg)) {
                     printf("Hardware Message Type: %d", hardware_msg.type);
@@ -243,7 +243,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len) {
                     MC_Position position = {.latitude_i = position_msg.latitude_i, .longitude_i = position_msg.longitude_i, .altitude = position_msg.altitude, .ground_speed = position_msg.ground_speed, .sats_in_view = position_msg.sats_in_view, .location_source = (uint8_t)position_msg.location_source, .has_latitude_i = position_msg.has_latitude_i, .has_longitude_i = position_msg.has_longitude_i, .has_altitude = position_msg.has_altitude, .has_ground_speed = position_msg.has_ground_speed};
                     intOnPositionMessage(header, position, decodedtmp.want_response);
                 } else {
-                    printf("Failed to decode Position\r\n");
+                    // printf("Failed to decode Position\r\n");
                 }
             } else if (decodedtmp.portnum == 4) {
                 // payload: protobuf User
@@ -261,31 +261,31 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len) {
                     node_info.hw_model = user_msg.hw_model;
                     intOnNodeInfo(header, node_info, decodedtmp.want_response);
                 } else {
-                    printf("Failed to decode User\r\n");
+                    // printf("Failed to decode User\r\n");
                 }
             } else if (decodedtmp.portnum == 5) {
                 printf("Received a routing packet\r\n");
                 // payload: protobuf Routing
                 meshtastic_Routing routing_msg = {};  // todo process it. this is just a debug. or simply drop it.
                 if (pb_decode_from_bytes(decodedtmp.payload.bytes, decodedtmp.payload.size, &meshtastic_Routing_msg, &routing_msg)) {
-                    printf("Routing reply count: %d\r\n", routing_msg.route_reply.route_count);
+                    // printf("Routing reply count: %d\r\n", routing_msg.route_reply.route_count);
                 } else {
-                    printf("Failed to decode Routing\r\n");
+                    // printf("Failed to decode Routing\r\n");
                 }
             } else if (decodedtmp.portnum == 6) {
-                printf("Received an admin packet\r\n");
-                // payload: protobuf AdminMessage
-                // drop it, not interested in admin messages
+                // printf("Received an admin packet\r\n");
+                //  payload: protobuf AdminMessage
+                //  drop it, not interested in admin messages
             } else if (decodedtmp.portnum == 7) {
-                printf("Received a compressed text message packet\r\n");
-                // payload: utf8 text with Unishox2 Compression
+                // printf("Received a compressed text message packet\r\n");
+                //  payload: utf8 text with Unishox2 Compression
                 char uncompressed_data[256] = {0};
                 size_t uncompressed_size = unishox2_decompress((const char*)&decodedtmp.payload.bytes, decodedtmp.payload.size, uncompressed_data, sizeof(uncompressed_data), USX_PSET_DFLT);
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(uncompressed_data), uncompressed_size), (uint8_t)ret, MC_MESSAGE_TYPE_TEXT};
                 intOnMessage(header, msg);
             } else if (decodedtmp.portnum == 8) {
-                printf("Received a waypoint packet\r\n");
-                // payload: protobuf Waypoint
+                // printf("Received a waypoint packet\r\n");
+                //  payload: protobuf Waypoint
                 meshtastic_Waypoint waypoint_msg = {};  // todo store and callbacke
                 if (pb_decode_from_bytes(decodedtmp.payload.bytes, decodedtmp.payload.size, &meshtastic_Waypoint_msg, &waypoint_msg)) {
                     MC_Waypoint waypoint;
@@ -300,51 +300,51 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len) {
                     waypoint.has_longitude_i = waypoint_msg.has_longitude_i;
                     intOnWaypointMessage(header, waypoint);
                 } else {
-                    printf("Failed to decode Waypoint\r\n");
+                    // printf("Failed to decode Waypoint\r\n");
                 }
             } else if (decodedtmp.portnum == 10) {
-                printf("Received a detection sensor packet\r\n");
-                // payload: utf8 text
+                // printf("Received a detection sensor packet\r\n");
+                //  payload: utf8 text
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(decodedtmp.payload.bytes), decodedtmp.payload.size), (uint8_t)ret, MC_MESSAGE_TYPE_DETECTOR_SENSOR};
                 intOnMessage(header, msg);
             } else if (decodedtmp.portnum == 11) {
-                printf("Received an alert packet\r\n");
-                // payload: utf8 text
+                // printf("Received an alert packet\r\n");
+                //  payload: utf8 text
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(decodedtmp.payload.bytes), decodedtmp.payload.size), (uint8_t)ret, MC_MESSAGE_TYPE_ALERT};
                 intOnMessage(header, msg);
             } else if (decodedtmp.portnum == 12) {
-                printf("Received a key verification packet\r\n");
-                // payload: protobuf KeyVerification
+                // printf("Received a key verification packet\r\n");
+                //  payload: protobuf KeyVerification
                 meshtastic_KeyVerification key_verification_msg = {};  // todo drop?
                 if (pb_decode_from_bytes(decodedtmp.payload.bytes, decodedtmp.payload.size, &meshtastic_KeyVerification_msg, &key_verification_msg)) {
                     ;
                 } else {
-                    printf("Failed to decode KeyVerification\r\n");
+                    // printf("Failed to decode KeyVerification\r\n");
                 }
             } else if (decodedtmp.portnum == 32) {
-                printf("Received a reply packet");
-                // payload: ASCII Plaintext //TODO determine the in/out part and send reply if needed
+                // printf("Received a reply packet");
+                //  payload: ASCII Plaintext //TODO determine the in/out part and send reply if needed
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(decodedtmp.payload.bytes), decodedtmp.payload.size), (uint8_t)ret, MC_MESSAGE_TYPE_PING};
                 intOnMessage(header, msg);
             } else if (decodedtmp.portnum == 34) {
-                printf("Received a paxcounter packet\r\n");
+                // printf("Received a paxcounter packet\r\n");
                 // payload: protobuf DROP
             } else if (decodedtmp.portnum == 64) {
-                printf("Received a serial packet\r\n");
+                // printf("Received a serial packet\r\n");
                 // payload: uart rx/tx data
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(decodedtmp.payload.bytes), decodedtmp.payload.size), (uint8_t)ret, MC_MESSAGE_TYPE_UART};
                 intOnMessage(header, msg);
             } else if (decodedtmp.portnum == 65) {
-                printf("Received a STORE_FORWARD_APP  packet\r\n");
-                // payload: ?
+                // printf("Received a STORE_FORWARD_APP  packet\r\n");
+                //  payload: ?
             } else if (decodedtmp.portnum == 66) {
-                printf("Received a RANGE_TEST_APP  packet\r\n");
-                // payload: ascii text
+                // printf("Received a RANGE_TEST_APP  packet\r\n");
+                //  payload: ascii text
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(decodedtmp.payload.bytes), decodedtmp.payload.size), (uint8_t)ret, MC_MESSAGE_TYPE_RANGE_TEST};
                 intOnMessage(header, msg);
             } else if (decodedtmp.portnum == 67) {
-                printf("Received a TELEMETRY_APP   packet\r\n");
-                // payload: Protobuf
+                // printf("Received a TELEMETRY_APP   packet\r\n");
+                //  payload: Protobuf
                 meshtastic_Telemetry telemetry_msg = {};  // todo store and callback
                 if (pb_decode_from_bytes(decodedtmp.payload.bytes, decodedtmp.payload.size, &meshtastic_Telemetry_msg, &telemetry_msg)) {
                     // printf("Telemetry Time: %lu", telemetry_msg.time);
@@ -392,15 +392,15 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len) {
                             break;
                     };
                 } else {
-                    printf("Failed to decode Telemetry");
+                    // printf("Failed to decode Telemetry");
                 }
             } else if (decodedtmp.portnum == 70) {
-                printf("Received a TRACEROUTE_APP    packet");
-                // payload: Protobuf RouteDiscovery
+                // printf("Received a TRACEROUTE_APP    packet");
+                //  payload: Protobuf RouteDiscovery
                 meshtastic_RouteDiscovery route_discovery_msg = {};  // drop
                 if (pb_decode_from_bytes(decodedtmp.payload.bytes, decodedtmp.payload.size, &meshtastic_RouteDiscovery_msg, &route_discovery_msg)) {
-                    printf("Route Discovery: Hop Count: %d", route_discovery_msg.route_count);
-                    // header.request_id ==0 --route back
+                    // printf("Route Discovery: Hop Count: %d", route_discovery_msg.route_count);
+                    //  header.request_id ==0 --route back
                     MC_RouteDiscovery route_discovery;
                     route_discovery.route_count = route_discovery_msg.route_count;
                     route_discovery.snr_towards_count = route_discovery_msg.snr_towards_count;
@@ -412,19 +412,19 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len) {
                     memcpy(route_discovery.snr_back, route_discovery_msg.snr_back, sizeof(route_discovery.snr_back));
                     intOnTraceroute(header, route_discovery);
                 } else {
-                    printf("Failed to decode RouteDiscovery");
+                    // printf("Failed to decode RouteDiscovery");
                 }
             } else if (decodedtmp.portnum == 71) {
-                printf("Received a NEIGHBORINFO_APP   packet");
+                // printf("Received a NEIGHBORINFO_APP   packet");
                 // payload: Protobuf ?
             } else {
-                printf("Received an unhandled portnum: %d", decodedtmp.portnum);
+                // printf("Received an unhandled portnum: %d", decodedtmp.portnum);
             }
             // if (header.want_ack && is_send_enabled && !is_in_stealth_mode && header.dstnode == my_nodeinfo.node_id) {
             //  send_ack(header);
             //}
         }
-        printf("\r\n");
+        // printf("\r\n");
         return ret;
     }
     return false;
