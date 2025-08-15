@@ -399,7 +399,7 @@ try {
         // Create a MarkerClusterGroup with options
         const markersCluster = L.markerClusterGroup({
             maxClusterRadius: 20,
-            disableClusteringAtZoom: 13 // At zoom 13+, markers won't be clustered
+            disableClusteringAtZoom: 20 // At zoom 13+, markers won't be clustered
         });
 
         // --- PANEL TOGGLE LOGIC ---
@@ -469,8 +469,9 @@ try {
                     nodeItem.addEventListener('click', () => {
                         const marker = markerLayer[node.node_id];
                         if (marker) {
-                            map.setView([node.latitude, node.longitude], 13);
-                            marker.openPopup();
+                            markersCluster.zoomToShowLayer(marker, function() {
+							  marker.openPopup();
+							});
                         }
                     });
                 }
@@ -508,8 +509,12 @@ try {
                 const node = nodes.find(n => n.node_id == nodeId);
 
                 if (marker && node) {
-                    map.setView([node.latitude, node.longitude], 13);
-                    marker.openPopup();
+					markersCluster.zoomToShowLayer(marker, function() {
+					  marker.openPopup();
+					});
+
+                    //map.setView([node.latitude, node.longitude], 12);
+                    //marker.openPopup();
                 }
             });
         });
