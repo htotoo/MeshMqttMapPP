@@ -6,13 +6,12 @@ header("Cache-Control: post-check=0, pre-check=0", false);
 header("Pragma: no-cache");
 header("Expires: 0");
 // --- CONFIGURATION ---
-// Updated database path
 $db_path = '/home/totoo/projects/meshlogger/build/nodes.db';
 
 // --- DATABASE CONNECTION & DATA FETCHING ---
 $nodes = [];
 $chat_messages = [];
-$node_count = 0; // Initialize count
+$node_count = 0; 
 
 // --- Handle Sorting ---
 $sort_by = $_GET['sort'] ?? 'last_updated'; // Default to last_updated
@@ -38,6 +37,19 @@ try {
         $hex = sprintf('%x', $row['node_id']);
         $short_hex = substr($hex, -8);
 
+        // Check if the node is stale (older than 1 day) using UTC time
+        $is_stale = false;
+        if (!empty($row['last_updated'])) {
+            $utc = new DateTimeZone('UTC');
+            $last_seen = new DateTime($row['last_updated'], $utc);
+            $now = new DateTime('now', $utc); // Get current time in UTC
+            $diff_seconds = $now->getTimestamp() - $last_seen->getTimestamp();
+            if ($diff_seconds > 86400) { // 86400 seconds = 1 day
+                $is_stale = true;
+            }
+        }
+
+
         $node_data = [
             'node_id' => $row['node_id'],
             'node_id_hex' => '!' . $short_hex,
@@ -47,7 +59,8 @@ try {
             'longitude' => $row['longitude'] / 10000000.0,
             'last_updated' => $row['last_updated'], // Pass the raw timestamp
             'battery_level' => $row['battery_level'] ?? 0,
-            'temperature' => $row['temperature'] ?? 0.0
+            'temperature' => $row['temperature'] ?? 0.0,
+            'is_stale' => $is_stale // Add the stale flag
         ];
         $nodes[] = $node_data;
         $node_map[$row['node_id']] = $node_data; // Create map for easy lookup
@@ -60,7 +73,6 @@ try {
     foreach ($chat_rows as $chat_row) {
         $sender_id = $chat_row['node_id'];
         
-        // --- Improved sender lookup logic ---
         $sender_display = '!' . substr(sprintf('%x', $sender_id), -8); // Default to hex
         $has_coords = false;
 
@@ -200,10 +212,13 @@ try {
             padding: 12px 15px;
             border-bottom: 1px solid #e9ecef;
             cursor: pointer;
-            transition: background-color 0.2s;
+            transition: background-color 0.2s, opacity 0.3s;
         }
         .node-item:hover { background-color: #e2e6ea; }
         .node-item.no-coords { cursor: default; color: #6c757d; }
+        .node-item.stale-node {
+            opacity: 0.6;
+        }
         .node-item b { font-size: 1.1em; color: #212529; }
         .node-item small { color: #495057; display: block; margin-top: 4px; }
         .node-id-hex { color: #007bff; font-family: monospace; }
@@ -312,17 +327,14 @@ try {
                 </div>
                 <div id="node-list"></div>
             </div>
-            <!-- Toggle button is now outside the collapsible panel -->
             <div id="panel-toggle-bar">
                 <span id="panel-toggle-btn">&laquo;</span>
             </div>
             <div id="map"></div>
         </div>
-        <!-- The bottom panel is open by default (no 'collapsed' class) -->
         <div id="bottom-panel">
             <div id="chat-header">
                 <span>Chat / Log</span>
-                <!-- The icon indicates the action to take: collapse the panel -->
                 <span id="chat-toggle-btn">▼</span>
             </div>
             <div id="chat-content">
@@ -351,14 +363,8 @@ try {
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 
     <script>
-        /**
-         * Converts a timestamp into a human-readable relative time string using the client's clock.
-         * @param {string} timestamp The timestamp from the database (e.g., "2024-01-01 12:00:00").
-         * @returns {string} The formatted time ago string (e.g., "5 perce").
-         */
         function timeAgo(timestamp) {
             if (!timestamp) return 'Soha';
-            // Append ' UTC' to ensure the browser parses it as a UTC timestamp, not local.
             const ago = new Date(timestamp + ' UTC');
             const now = new Date();
             const diffSeconds = Math.round((now - ago) / 1000);
@@ -396,10 +402,31 @@ try {
         // --- DATA & UI ---
         const nodes = <?php echo json_encode($nodes); ?>;
         const markerLayer = {};
+        
+        // --- CUSTOM MARKER ICONS ---
+        const redIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        const blueIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+
         // Create a MarkerClusterGroup with options
         const markersCluster = L.markerClusterGroup({
             maxClusterRadius: 20,
-            disableClusteringAtZoom: 20 // At zoom 13+, markers won't be clustered
+            disableClusteringAtZoom: 20 // At zoom n+, markers won't be clustered
         });
 
         // --- PANEL TOGGLE LOGIC ---
@@ -411,7 +438,6 @@ try {
 
         chatHeader.addEventListener('click', () => {
             const isCollapsed = bottomPanel.classList.toggle('collapsed');
-            // If it's now collapsed, show the 'expand' icon (up arrow). Otherwise, show 'collapse' icon.
             chatToggleBtn.innerHTML = isCollapsed ? '▲' : '▼';
             setTimeout(() => map.invalidateSize(), 300);
         });
@@ -419,7 +445,8 @@ try {
         // --- Create Map Markers ---
         nodes.forEach(node => {
             if (node.latitude !== 0 || node.longitude !== 0) {
-                const marker = L.marker([node.latitude, node.longitude]);
+                const iconToUse = node.is_stale ? redIcon : blueIcon;
+                const marker = L.marker([node.latitude, node.longitude], { icon: iconToUse });
                 
                 let popupContent = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}`;
                 if (node.battery_level > 0) {
@@ -444,6 +471,9 @@ try {
                 const nodeItem = document.createElement('div');
                 const hasCoords = node.latitude !== 0 || node.longitude !== 0;
                 nodeItem.className = hasCoords ? 'node-item' : 'node-item no-coords';
+                if (node.is_stale) {
+                    nodeItem.classList.add('stale-node');
+                }
                 
                 nodeItem.dataset.filterText = `${node.long_name} ${node.short_name} ${node.node_id_hex}`.toLowerCase();
                 
@@ -469,8 +499,9 @@ try {
                     nodeItem.addEventListener('click', () => {
                         const marker = markerLayer[node.node_id];
                         if (marker) {
+                            map.setView([node.latitude, node.longitude], 13);
                             markersCluster.zoomToShowLayer(marker, function() {
-							  marker.openPopup();
+							  marker.openPopup();
 							});
                         }
                     });
@@ -509,12 +540,10 @@ try {
                 const node = nodes.find(n => n.node_id == nodeId);
 
                 if (marker && node) {
+                    map.setView([node.latitude, node.longitude], 13);
 					markersCluster.zoomToShowLayer(marker, function() {
-					  marker.openPopup();
+					  marker.openPopup();
 					});
-
-                    //map.setView([node.latitude, node.longitude], 12);
-                    //marker.openPopup();
                 }
             });
         });
