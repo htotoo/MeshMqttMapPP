@@ -43,16 +43,17 @@ class NodeDb {
         sqlite3_finalize(stmt);
     }
 
-    void saveChatMessage(uint32_t nodeId, uint16_t chan_id, const std::string& message) {
+    void saveChatMessage(uint32_t nodeId, uint16_t chan_id, const std::string& message, uint16_t freq) {
         std::lock_guard<std::mutex> lock(mtx);
         if (!db) return;
 
         sqlite3_stmt* stmt;
-        const char* sql = "INSERT INTO chat (node_id, chan_id, message) VALUES (?, ?, ?)";
+        const char* sql = "INSERT INTO chat (node_id, chan_id, message, freq) VALUES (?, ?, ?, ?)";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, nodeId);
             sqlite3_bind_int(stmt, 2, chan_id);
             sqlite3_bind_text(stmt, 3, message.c_str(), -1, SQLITE_STATIC);
+            sqlite3_bind_int(stmt, 4, freq);
 
             if (sqlite3_step(stmt) != SQLITE_DONE) {
                 std::cerr << "Error inserting chat message: " << sqlite3_errmsg(db) << std::endl;
@@ -170,6 +171,7 @@ class NodeDb {
             "node_id INTEGER, "
             "chan_id INTEGER, "
             "message TEXT, "
+            "freq INTEGER, "
             "timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP);";
         if (db) {
             char* errMsg = nullptr;

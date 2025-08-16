@@ -68,10 +68,11 @@ try {
     $node_count = count($nodes);
 
     // 3. Fetch chat messages from the last 5 days
-    $chat_stmt = $db->query("SELECT node_id, message, timestamp FROM chat WHERE timestamp >= date('now', '-5 days') ORDER BY timestamp DESC");
+    $chat_stmt = $db->query("SELECT node_id, message, timestamp, freq FROM chat WHERE timestamp >= date('now', '-5 days') ORDER BY timestamp DESC");
     $chat_rows = $chat_stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($chat_rows as $chat_row) {
         $sender_id = $chat_row['node_id'];
+		$freq = $chat_row['freq'];
         
         $sender_display = '!' . substr(sprintf('%x', $sender_id), -8); // Default to hex
         $has_coords = false;
@@ -89,6 +90,7 @@ try {
             'sender' => $sender_display,
             'message' => htmlspecialchars($chat_row['message'], ENT_QUOTES, 'UTF-8'),
             'timestamp' => htmlspecialchars($chat_row['timestamp'], ENT_QUOTES, 'UTF-8'),
+			'freq' => $freq,
             'has_coords' => $has_coords
         ];
     }
@@ -290,6 +292,11 @@ try {
         .chat-text {
             word-break: break-word;
         }
+		
+		.chat-title-link
+		{
+			color: white;
+		}
 
         /* --- MOBILE RESPONSIVENESS --- */
         @media (max-width: 768px) {
@@ -334,14 +341,14 @@ try {
         </div>
         <div id="bottom-panel">
             <div id="chat-header">
-                <span>Chat / Log</span>
+                <span>Chat / Log (<a href="https://t.me/+z2Yk9z31vDkyMzA8" onclick="event.stopPropagation();" class="chat-title-link" target="_blank" >Telegram csatorna</a>)</span>
                 <span id="chat-toggle-btn">▼</span>
             </div>
             <div id="chat-content">
                 <?php if (!empty($chat_messages)): ?>
                     <?php foreach ($chat_messages as $msg): ?>
                         <div class="chat-message">
-                            <span class="chat-timestamp">[<?php echo $msg['timestamp']; ?>]</span>
+                            <span class="chat-timestamp">[<?php echo $msg['timestamp']; ?>] [<?php echo $msg['freq']; ?>]</span>
                             <?php if ($msg['has_coords']): ?>
                                 <a href="#" class="chat-sender-link" data-node-id="<?php echo $msg['node_id']; ?>"><?php echo $msg['sender']; ?>:</a>
                             <?php else: ?>

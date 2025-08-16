@@ -72,7 +72,7 @@ class MeshMqttClient {
         onRaw = cb;
     }
 
-    void addTopic(std::string topic) {topicList.push_back(topic);}
+    void addTopic(std::string topic) { topicList.push_back(topic); }
 
    private:
     MQTTClient client;
@@ -91,7 +91,7 @@ class MeshMqttClient {
     void intOnTraceroute(MC_Header& header, MC_RouteDiscovery& route_discovery);
     void intOnPositionMessage(MC_Header& header, MC_Position& position, bool want_reply);
 
-    int16_t ProcessPacket(uint8_t* data, int len);
+    int16_t ProcessPacket(uint8_t* data, int len, uint16_t freq);
     // Callback function pointers
     OnMessageCallback onMessage = nullptr;  // Function pointer for onMessage callback
     OnPositionMessageCallback onPositionMessage = nullptr;

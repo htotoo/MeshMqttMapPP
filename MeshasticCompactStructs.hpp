@@ -55,6 +55,7 @@ struct MC_Header {
     float snr;
     uint32_t request_id;
     uint32_t reply_id;
+    uint16_t freq;
 };
 
 struct MC_OutQueueEntry {

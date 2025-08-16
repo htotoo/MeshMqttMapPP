@@ -49,8 +49,7 @@ void MeshMqttClient::loop() {
 
         // Sikeres csatlakozás után újra fel kell iratkozni a témakörökre!
         printf("Subscribe to topics...\n");
-        for(int i = 0; i<topicList.size(); i++)
-        {
+        for (int i = 0; i < topicList.size(); i++) {
             if ((rc = MQTTClient_subscribe(client, topicList[i].c_str(), 1)) != MQTTCLIENT_SUCCESS) {
                 fprintf(stderr, "Failed to resubscribe, error code: %d\n", rc);
                 // Nem lépünk ki, a ciklus újrapróbálja a kapcsolatot bontani és újrakötni
@@ -164,19 +163,19 @@ void MeshMqttClient::intOnPositionMessage(MC_Header& header, MC_Position& positi
 }
 
 int MeshMqttClient::messageArrived(void* context, char* topicName, int topicLen, MQTTClient_message* message) {
-    /*unsigned char* payload = static_cast<unsigned char*>(message->payload);
-    for (int i = 0; i < message->payloadlen; i++) {
-        printf("%02X ", payload[i]);
-    }*/
+    uint16_t freq = 868;
+    if (topicName && strstr(topicName, "433")) {
+        freq = 433;
+    }
     MeshMqttClient* client = static_cast<MeshMqttClient*>(context);
-    client->ProcessPacket(static_cast<uint8_t*>(message->payload), message->payloadlen);
+    client->ProcessPacket(static_cast<uint8_t*>(message->payload), message->payloadlen, freq);
 
     MQTTClient_freeMessage(&message);
     MQTTClient_free(topicName);
     return 1;
 }
 
-int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len) {
+int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
     if (len > 0) {
         MC_Header header;  // for compatibility reason
         meshtastic_ServiceEnvelope serviceEnv;
@@ -194,6 +193,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len) {
         header.chan_hash = serviceEnv.packet->channel;
         header.want_ack = serviceEnv.packet->want_ack;
         header.via_mqtt = serviceEnv.packet->via_mqtt;
+        header.freq = freq;
 
         decodedtmp = serviceEnv.packet->decoded;  // copy the decoded data
         int16_t ret = 0;

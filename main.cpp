@@ -36,9 +36,9 @@ void m_on_message(MC_Header& header, MC_TextMessage& message) {
         return;
     }
     printf("Message from node 0x%08" PRIx32 ": %s\n", header.srcnode, message.text.c_str());
-    nodeDb.saveChatMessage(header.srcnode, message.chan, message.text);
+    nodeDb.saveChatMessage(header.srcnode, message.chan, message.text, header.freq);
 
-    std::string telegramMessage = std::to_string(message.chan) + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
+    std::string telegramMessage = std::to_string(message.chan) + "@" + std::to_string(header.freq) + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
     printf("Telegram: %s\n", telegramMessage.c_str());
     telegramPoster.queueMessage(telegramMessage);
 }
