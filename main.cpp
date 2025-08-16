@@ -19,6 +19,8 @@
 #include "messageidtracker.hpp"
 #include "nodenamemap.hpp"
 
+#include "config.hpp"
+
 MessageIdTracker messageIdTracker;
 NodeNameMap nodeNameMap;
 
@@ -34,20 +36,21 @@ void m_on_message(MC_Header& header, MC_TextMessage& message) {
         return;
     }
     printf("Message from node 0x%08" PRIx32 ": %s\n", header.srcnode, message.text.c_str());
-    nodeDb.saveChatMessage(header.srcnode, message.text);
+    nodeDb.saveChatMessage(header.srcnode, message.chan, message.text);
 
-    time_t now = time(nullptr);
-    struct tm tm_utc;
-    char buf[20];
-    gmtime_r(&now, &tm_utc);
-    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm_utc);
-    std::string telegramMessage = std::string(buf) + "  " + std::to_string(message.chan) + "# " + nodeNameMap.getNodeName(header.srcnode) + ": " + message.text;
+    std::string telegramMessage = std::to_string(message.chan) + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
     printf("Telegram: %s\n", telegramMessage.c_str());
     telegramPoster.queueMessage(telegramMessage);
 }
 
 void m_on_position_message(MC_Header& header, MC_Position& position, bool needReply) {
     if (messageIdTracker.check(header.packet_id)) {
+        return;
+    }
+    if (!position.has_latitude_i || !position.has_longitude_i) {
+        return;
+    }
+    if (position.latitude_i == 0 && position.longitude_i == 0) {
         return;
     }
     printf("Position from node %s: Lat: %d, Lon: %d, Alt: %d, Speed: %d\n", nodeNameMap.getNodeName(header.srcnode).c_str(), position.latitude_i, position.longitude_i, position.altitude, position.ground_speed);
@@ -105,6 +108,8 @@ void handle_signal(int signal) {
 
 int main(int argc, char* argv[]) {
     signal(SIGINT, handle_signal);
+    telegramPoster.setApiToken(TELEGRAM_TOKEN);
+    telegramPoster.setChatId(TELEGRAM_CHAT_ID);
     printf("Loading node names from database...\n");
     nodeDb.loadNodeNames(nodeNameMap);
     printf("Connecting to MQTT servers...\n");
@@ -124,7 +129,6 @@ int main(int argc, char* argv[]) {
     mainClient.setOnTelemetryDevice(m_on_telemetry_device);
     mainClient.setOnTelemetryEnvironment(m_on_telemetry_environment);
     mainClient.setOnTraceroute(m_on_traceroute);
-    mainClient.addTopic("msh/EU_868/2/e/LongFast/!da634024");
     mainClient.init();
     localClient.init();
     while (running) {
