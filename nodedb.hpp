@@ -3,7 +3,7 @@
 
 #include <iostream>
 #include <sqlite3.h>
-
+#include "nodenamemap.hpp"
 #include <mutex>
 
 class NodeDb {
@@ -22,6 +22,25 @@ class NodeDb {
         if (db) {
             sqlite3_close(db);
         }
+    }
+
+    void loadNodeNames(NodeNameMap& names) {
+        std::lock_guard<std::mutex> lock(mtx);
+        if (!db) return;
+
+        sqlite3_stmt* stmt;
+        const char* sql = "SELECT node_id, short_name FROM nodes";
+        if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                uint32_t nodeId = sqlite3_column_int(stmt, 0);
+                const char* name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+                if (!name) continue;
+                names.setNodeName(nodeId, name);
+            }
+        } else {
+            std::cerr << "Error preparing statement: " << sqlite3_errmsg(db) << std::endl;
+        }
+        sqlite3_finalize(stmt);
     }
 
     void saveChatMessage(uint32_t nodeId, const std::string& message) {

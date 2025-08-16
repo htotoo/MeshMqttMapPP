@@ -32,6 +32,14 @@ if(NOT MBEDTLS_INCLUDE_DIR OR NOT MBEDTLS_LIBRARY OR NOT MBEDX509_LIBRARY OR NOT
     message(FATAL_ERROR "MbedTLS components not found. Please ensure 'libmbedtls-dev' is installed.")
 endif()
 
+# ADDED: Find libcurl
+find_path(CURL_INCLUDE_DIR NAMES curl/curl.h)
+find_library(CURL_LIBRARY NAMES curl)
+if(NOT CURL_INCLUDE_DIR OR NOT CURL_LIBRARY)
+    message(FATAL_ERROR "libcurl headers or library not found. Please ensure 'libcurl4-openssl-dev' or equivalent is installed.")
+endif()
+
+
 message(STATUS "Found Paho MQTT Library: ${PAHO_MQTT_LIBRARY}")
 message(STATUS "Found Paho MQTT Include Dir: ${PAHO_MQTT_INCLUDE_DIR}")
 message(STATUS "Found MbedTLS Include Dir: ${MBEDTLS_INCLUDE_DIR}")
@@ -55,7 +63,9 @@ add_executable(meshlogger
     main.cpp
     meshmqttclient.cpp
     nodedb.cpp
-	unishox2.cpp
+    main.cpp
+    telegram.cpp
+    unishox2.cpp
     ${MESHTASTIC_SOURCES}
     ${NANOPB_SOURCES}
 )
@@ -70,6 +80,7 @@ target_include_directories(meshlogger PRIVATE
     "${PAHO_MQTT_INCLUDE_DIR}"
     "${MBEDTLS_INCLUDE_DIR}"
     "${SQLITE3_INCLUDE_DIR}"
+    "${CURL_INCLUDE_DIR}" # ADDED
 )
 
 target_link_libraries(meshlogger PRIVATE
@@ -80,6 +91,7 @@ target_link_libraries(meshlogger PRIVATE
     "${MBEDX509_LIBRARY}"
     "${MBEDCRYPTO_LIBRARY}"
     "${SQLITE3_LIBRARY}"
+    "${CURL_LIBRARY}" # ADDED
 )
 
 # --- Optional: Install command ---

@@ -9,7 +9,7 @@
 #include <string.h>
 #include <unistd.h>  // sleep()
 #include <atomic>    // std::atomic
-
+#include <vector>
 #include "MQTTClient.h"
 #include "MeshasticCompactStructs.hpp"
 
@@ -72,6 +72,8 @@ class MeshMqttClient {
         onRaw = cb;
     }
 
+    void addTopic(std::string topic) {topicList.push_back(topic);}
+
    private:
     MQTTClient client;
     mbedtls_aes_context aes_ctx;
@@ -113,11 +115,7 @@ class MeshMqttClient {
     std::string user = "meshdev";
     std::string pass = "large4cats";
     MQTTClient_connectOptions conn_opts;
-    char topic1[20] = "msh/EU_433/HU/2/e/#";
-    char topic2[20] = "msh/EU_868/HU/2/e/#";
-    char* topicList[2] = {topic1, topic2};
-    int qosList[2] = {QOS, QOS};
-    int topicCount = 2;
+    std::vector<std::string> topicList = {"msh/EU_433/HU/2/e/#", "msh/EU_868/HU/2/e/#"};
 };
 
 #endif  // MESHMQTTCLIENT_HPP

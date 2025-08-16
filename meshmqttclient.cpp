@@ -49,12 +49,15 @@ void MeshMqttClient::loop() {
 
         // Sikeres csatlakozás után újra fel kell iratkozni a témakörökre!
         printf("Subscribe to topics...\n");
-        if ((rc = MQTTClient_subscribeMany(client, topicCount, topicList, qosList)) != MQTTCLIENT_SUCCESS) {
-            fprintf(stderr, "Failed to resubscribe, error code: %d\n", rc);
-            // Nem lépünk ki, a ciklus újrapróbálja a kapcsolatot bontani és újrakötni
-            MQTTClient_disconnect(client, TIMEOUT);
-        } else {
-            printf("Successful resubscription.\n\n");
+        for(int i = 0; i<topicList.size(); i++)
+        {
+            if ((rc = MQTTClient_subscribe(client, topicList[i].c_str(), 1)) != MQTTCLIENT_SUCCESS) {
+                fprintf(stderr, "Failed to resubscribe, error code: %d\n", rc);
+                // Nem lépünk ki, a ciklus újrapróbálja a kapcsolatot bontani és újrakötni
+                MQTTClient_disconnect(client, TIMEOUT);
+            } else {
+                printf("Successful resubscription.\n\n");
+            }
         }
     }
 }

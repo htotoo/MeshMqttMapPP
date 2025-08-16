@@ -15,50 +15,42 @@
 #include <unordered_set>
 #include <mutex>
 #include <deque>
+#include "telegram.hpp"
+#include "messageidtracker.hpp"
+#include "nodenamemap.hpp"
+
+MessageIdTracker messageIdTracker;
+NodeNameMap nodeNameMap;
+
 std::atomic<bool> running(true);
 
 MeshMqttClient localClient;
 MeshMqttClient mainClient;
-MeshMqttClient liamClient;
 NodeDb nodeDb("nodes.db");
+TelegramPoster telegramPoster;
 
-class MessageIdTracker {
-   public:
-    bool check(uint32_t msgid) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (msgids_.find(msgid) != msgids_.end()) {
-            return true;
-        }
-        if (msgids_.size() >= 50) {
-            // Remove the oldest inserted msgid
-            msgids_order_.pop_front();
-            msgids_.erase(msgids_order_.front());
-        }
-        msgids_order_.push_back(msgid);
-        msgids_.insert(msgid);
-        return false;
-    }
-
-   private:
-    std::unordered_set<uint32_t> msgids_;
-    std::deque<uint32_t> msgids_order_;
-    std::mutex mutex_;
-};
-
-MessageIdTracker messageIdTracker;
 void m_on_message(MC_Header& header, MC_TextMessage& message) {
     if (messageIdTracker.check(header.packet_id)) {
         return;
     }
     printf("Message from node 0x%08" PRIx32 ": %s\n", header.srcnode, message.text.c_str());
     nodeDb.saveChatMessage(header.srcnode, message.text);
+
+    time_t now = time(nullptr);
+    struct tm tm_utc;
+    char buf[20];
+    gmtime_r(&now, &tm_utc);
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm_utc);
+    std::string telegramMessage = std::string(buf) + "  " + std::to_string(message.chan) + "# " + nodeNameMap.getNodeName(header.srcnode) + ": " + message.text;
+    printf("Telegram: %s\n", telegramMessage.c_str());
+    telegramPoster.queueMessage(telegramMessage);
 }
 
 void m_on_position_message(MC_Header& header, MC_Position& position, bool needReply) {
     if (messageIdTracker.check(header.packet_id)) {
         return;
     }
-    printf("Position from node 0x%08" PRIx32 ": Lat: %d, Lon: %d, Alt: %d, Speed: %d\n", header.srcnode, position.latitude_i, position.longitude_i, position.altitude, position.ground_speed);
+    printf("Position from node %s: Lat: %d, Lon: %d, Alt: %d, Speed: %d\n", nodeNameMap.getNodeName(header.srcnode).c_str(), position.latitude_i, position.longitude_i, position.altitude, position.ground_speed);
     nodeDb.setNodePosition(header.srcnode, position.latitude_i, position.longitude_i, position.altitude);
 }
 
@@ -68,6 +60,7 @@ void m_on_node_info(MC_Header& header, MC_NodeInfo& nodeinfo, bool needReply) {
     }
     printf("Node Info from node 0x%08" PRIx32 ": ID: %s, Short Name: %s, Long Name: %s\n", header.srcnode, nodeinfo.id, nodeinfo.short_name, nodeinfo.long_name);
     nodeDb.setNodeInfo(header.srcnode, nodeinfo.short_name, nodeinfo.long_name);
+    nodeNameMap.setNodeName(header.srcnode, nodeinfo.short_name);
 }
 
 void m_on_waypoint_message(MC_Header& header, MC_Waypoint& waypoint) {
@@ -112,11 +105,11 @@ void handle_signal(int signal) {
 
 int main(int argc, char* argv[]) {
     signal(SIGINT, handle_signal);
+    printf("Loading node names from database...\n");
+    nodeDb.loadNodeNames(nodeNameMap);
+    printf("Connecting to MQTT servers...\n");
 
     mainClient.set_address("tcp://mqtt.meshtastic.org:1883");
-    liamClient.set_address("tcp://mqtt.meshtastic.liamcottle.net:1883");
-    liamClient.set_user_pass("uplink", "uplink");
-
     localClient.setOnMessage(m_on_message);
     localClient.setOnPositionMessage(m_on_position_message);
     localClient.setOnWaypointMessage(m_on_waypoint_message);
@@ -131,21 +124,17 @@ int main(int argc, char* argv[]) {
     mainClient.setOnTelemetryDevice(m_on_telemetry_device);
     mainClient.setOnTelemetryEnvironment(m_on_telemetry_environment);
     mainClient.setOnTraceroute(m_on_traceroute);
-    liamClient.setOnMessage(m_on_message);
-    liamClient.setOnPositionMessage(m_on_position_message);
-    liamClient.setOnWaypointMessage(m_on_waypoint_message);
-    liamClient.setOnNodeInfoMessage(m_on_node_info);
-    liamClient.setOnTelemetryDevice(m_on_telemetry_device);
-    liamClient.setOnTelemetryEnvironment(m_on_telemetry_environment);
-    liamClient.setOnTraceroute(m_on_traceroute);
-
+    mainClient.addTopic("msh/EU_868/2/e/LongFast/!da634024");
     mainClient.init();
     localClient.init();
-    liamClient.init();
     while (running) {
         localClient.loop();
         mainClient.loop();
-        liamClient.loop();
+        try {
+            telegramPoster.loop();
+        } catch (const std::exception& e) {
+            std::cerr << e.what() << '\n';
+        }
         sleep(1);
     }
 
