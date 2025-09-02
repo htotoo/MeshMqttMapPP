@@ -68,8 +68,8 @@ try {
     }
     $node_count = count($nodes);
 
-    // 3. Fetch SNR data from the last 2 weeks
-    $snr_stmt = $db->query("SELECT node1, node2, snr FROM snr WHERE last_updated >= date('now', '-14 days')");
+    // 3. Fetch SNR data from the last 2 weeks, filtering out self-references and zero SNR values
+    $snr_stmt = $db->query("SELECT node1, node2, snr FROM snr WHERE last_updated >= date('now', '-14 days') AND node1 != node2 AND snr != 0");
     $snr_data = $snr_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
@@ -179,7 +179,7 @@ try {
             flex-shrink: 0;
         }
         #filter-container {
-            padding: 10px;
+            padding: 10px 10px 5px 10px;
             background-color: #e9ecef;
             border-bottom: 1px solid #dee2e6;
         }
@@ -189,6 +189,12 @@ try {
             box-sizing: border-box;
             border: 1px solid #ced4da;
             border-radius: .25rem;
+        }
+        #view-filter-container {
+            padding: 5px 10px 10px 10px; 
+            font-size: 0.9em; 
+            background-color: #e9ecef; 
+            border-bottom: 1px solid #dee2e6;
         }
         #sort-container {
             padding: 8px 10px;
@@ -327,6 +333,18 @@ try {
             color: #333;
         }
 
+        .snr-label-icon {
+            background: transparent;
+            border: none;
+        }
+
+        /* --- Custom Popup Styling --- */
+        .leaflet-popup-content-wrapper .leaflet-popup-content {
+            max-height: 250px; /* Set a max height for the popup content */
+            overflow-y: auto;   /* Add a vertical scrollbar if content overflows */
+            padding-right: 5px; /* Add some space for the scrollbar */
+        }
+
         /* --- MOBILE RESPONSIVENESS --- */
         @media (max-width: 768px) {
             #node-list-panel {
@@ -355,6 +373,10 @@ try {
                 </div>
                 <div id="filter-container">
                     <input type="text" id="node-filter-input" placeholder="Filter by name or ID...">
+                </div>
+                <div id="view-filter-container">
+                    <input type="checkbox" id="filter-by-map-view-toggle">
+                    <label for="filter-by-map-view-toggle">Only show nodes in map view</label>
                 </div>
                 <div id="sort-container">
                     Sort by:
@@ -389,7 +411,7 @@ try {
                         <div class="chat-message">
                             <span class="chat-timestamp">[<?php echo $msg['timestamp']; ?>] [<?php echo $msg['freq']; ?>]</span>
                             <?php if ($msg['has_coords']): ?>
-                                <a href="#" class="chat-sender-link" data-node-id="<?php echo $msg['node_id']; ?>"><?php echo $msg['sender']; ?>:</a>
+                                <a href="#" class="chat-sender-link" onclick="handleChatLinkClick(event, <?php echo $msg['node_id']; ?>)"><?php echo $msg['sender']; ?>:</a>
                             <?php else: ?>
                                 <span class="chat-sender"><?php echo $msg['sender']; ?>:</span>
                             <?php endif; ?>
@@ -439,6 +461,7 @@ try {
         const chatToggleBtn = document.getElementById('chat-toggle-btn');
         const snrToggle = document.getElementById('snr-toggle');
         const hideStaleToggle = document.getElementById('hide-stale-toggle');
+        const filterByMapViewToggle = document.getElementById('filter-by-map-view-toggle');
 
         // --- MAP INITIALIZATION ---
         const map = L.map(mapElement).setView([47.4979, 19.0402], 7);
@@ -451,6 +474,7 @@ try {
         const nodes = <?php echo json_encode($nodes); ?>;
         const snrData = <?php echo json_encode($snr_data); ?>;
         const markerLayer = {};
+        const individualMarkerLayer = {}; // Lookup for non-clustered markers
         
         // --- CUSTOM MARKER ICONS ---
         const redIcon = new L.Icon({
@@ -474,11 +498,17 @@ try {
 
         // Create a MarkerClusterGroup with options
         const activeMarkersCluster = L.markerClusterGroup({
-            maxClusterRadius: 20,
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true,
+            maxClusterRadius: 40,
             disableClusteringAtZoom: 20
         });
         const staleMarkersCluster = L.markerClusterGroup({
-            maxClusterRadius: 20,
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true,
+            maxClusterRadius: 40,
             disableClusteringAtZoom: 20
         });
         
@@ -523,14 +553,14 @@ try {
                     if (link.node2 === node.node_id) {
                         const sourceNode = nodesById[link.node1];
                         if (sourceNode) {
-                            snrTo.push(`${sourceNode.short_name} (${sourceNode.node_id_hex}): ${link.snr} dB`);
+                            snrTo.push(`<a href="#" onclick="openNodePopup(${sourceNode.node_id}); return false;">${sourceNode.short_name}</a> (${sourceNode.node_id_hex}): ${link.snr} dB`);
                         }
                     }
                     // SNR from this node
                     if (link.node1 === node.node_id) {
                         const destNode = nodesById[link.node2];
                         if (destNode) {
-                            snrFrom.push(`${destNode.short_name} (${destNode.node_id_hex}): ${link.snr} dB`);
+                            snrFrom.push(`<a href="#" onclick="openNodePopup(${destNode.node_id}); return false;">${destNode.short_name}</a> (${destNode.node_id_hex}): ${link.snr} dB`);
                         }
                     }
                 });
@@ -559,6 +589,7 @@ try {
                 const individualMarker = L.marker([node.latitude, node.longitude], { icon: iconToUse });
                 individualMarker.node_id = node.node_id; // Add unique ID to marker
                 individualMarker.bindPopup(popupFunction);
+                individualMarkerLayer[node.node_id] = individualMarker; // Add to new lookup
 
                 if (node.is_stale) {
                     staleMarkersCluster.addLayer(marker);
@@ -583,6 +614,7 @@ try {
                     nodeItem.classList.add('stale-node');
                 }
                 
+                nodeItem.dataset.nodeId = node.node_id; // For linking list item to node data
                 nodeItem.dataset.filterText = `${node.long_name} ${node.short_name} ${node.node_id_hex}`.toLowerCase();
                 
                 let statsHtml = '';
@@ -605,25 +637,7 @@ try {
 
                 if (hasCoords) {
                     nodeItem.addEventListener('click', () => {
-                        const marker = markerLayer[node.node_id];
-                        if (marker) {
-                            const isSnrActive = snrToggle.checked;
-                            map.setView([node.latitude, node.longitude], isSnrActive ? 15 : 13);
-
-                            if (isSnrActive) {
-                                const targetLayer = node.is_stale ? staleIndividualMarkersLayer : activeIndividualMarkersLayer;
-                                targetLayer.eachLayer(indMarker => {
-                                    if (indMarker.node_id === node.node_id) {
-                                        indMarker.openPopup();
-                                    }
-                                });
-                            } else {
-                                const targetCluster = node.is_stale ? staleMarkersCluster : activeMarkersCluster;
-                                targetCluster.zoomToShowLayer(marker, function() {
-    							    marker.openPopup();
-    							});
-                            }
-                        }
+                        openNodePopup(node.node_id);
                     });
                 }
                 nodeListElement.appendChild(nodeItem);
@@ -642,13 +656,26 @@ try {
         function updateNodeListVisibility() {
             const filterValue = nodeFilterInput.value.toLowerCase();
             const hideStale = hideStaleToggle.checked;
+            const filterByView = filterByMapViewToggle.checked;
+            const mapBounds = map.getBounds();
             const allNodeItems = nodeListElement.querySelectorAll('.node-item');
 
             allNodeItems.forEach(item => {
                 const isStale = item.classList.contains('stale-node');
                 const matchesFilter = item.dataset.filterText.includes(filterValue);
+                
+                let isVisibleOnMap = true; // Default to true
+                if (filterByView) {
+                    const nodeId = item.dataset.nodeId;
+                    const node = nodes.find(n => n.node_id == nodeId);
+                    if (node && (node.latitude !== 0 || node.longitude !== 0)) {
+                        isVisibleOnMap = mapBounds.contains([node.latitude, node.longitude]);
+                    } else {
+                        isVisibleOnMap = false; // Nodes without coords are not on the map
+                    }
+                }
 
-                if (matchesFilter && (!hideStale || !isStale)) {
+                if (matchesFilter && (!hideStale || !isStale) && isVisibleOnMap) {
                     item.style.display = '';
                 } else {
                     item.style.display = 'none';
@@ -657,35 +684,53 @@ try {
         }
         nodeFilterInput.addEventListener('keyup', updateNodeListVisibility);
         hideStaleToggle.addEventListener('change', updateNodeListVisibility);
+        filterByMapViewToggle.addEventListener('change', updateNodeListVisibility);
+        map.on('moveend', updateNodeListVisibility); // Update list when map moves
 
 
-        // --- CHAT SENDER CLICK LOGIC ---
-        document.querySelectorAll('.chat-sender-link').forEach(link => {
-            link.addEventListener('click', (event) => {
-                event.preventDefault();
-                const nodeId = link.getAttribute('data-node-id');
+        // --- EVENT HANDLERS ---
+        function handleChatLinkClick(event, nodeId) {
+            event.preventDefault();
+            openNodePopup(nodeId);
+        }
+        
+        // --- POPUP STATE MANAGEMENT ---
+        let isPopupOpen = false;
+        map.on('popupopen', () => { isPopupOpen = true; });
+        map.on('popupclose', () => { isPopupOpen = false; });
+        
+        // --- Unified function to open a specific node's popup ---
+        function openNodePopup(nodeId) {
+            const node = nodes.find(n => n.node_id == nodeId);
+            if (!node || (node.latitude === 0 && node.longitude === 0)) return;
+
+            const doMoveAndOpen = () => {
+                const isSnrActive = snrToggle.checked;
                 const marker = markerLayer[nodeId];
-                const node = nodes.find(n => n.node_id == nodeId);
+                if (!marker) return;
 
-                if (marker && node) {
-                    const isSnrActive = snrToggle.checked;
-                    map.setView([node.latitude, node.longitude], isSnrActive ? 15 : 13);
-                    if (!isSnrActive) {
-                        const targetCluster = node.is_stale ? staleMarkersCluster : activeMarkersCluster;
-                        targetCluster.zoomToShowLayer(marker, function() {
-                            marker.openPopup();
-                        });
-                    } else {
-                        const targetLayer = node.is_stale ? staleIndividualMarkersLayer : activeIndividualMarkersLayer;
-                        targetLayer.eachLayer(indMarker => {
-                            if (indMarker.node_id == nodeId) {
-                                indMarker.openPopup();
-                            }
-                        });
-                    }
+                if (isSnrActive) {
+                    const individualMarker = individualMarkerLayer[nodeId];
+                     if (individualMarker) {
+                         map.flyTo(marker.getLatLng(), 15);
+                         map.once('moveend', () => individualMarker.openPopup());
+                     }
+                } else {
+                    const targetCluster = node.is_stale ? staleMarkersCluster : activeMarkersCluster;
+                    targetCluster.zoomToShowLayer(marker, () => {
+                        marker.openPopup();
+                    });
                 }
-            });
-        });
+            };
+
+            if (isPopupOpen) {
+                map.once('popupclose', doMoveAndOpen);
+                map.closePopup();
+            } else {
+                doMoveAndOpen();
+            }
+        }
+
 
         // --- SNR TOGGLE LOGIC ---
         function getSnrColor(snr) {
@@ -741,19 +786,48 @@ try {
                     const midPoint1 = map.containerPointToLatLng([ (p1.x + p2.x)/2 + offsetX, (p1.y + p2.y)/2 + offsetY ]);
                     const midPoint2 = map.containerPointToLatLng([ (p1.x + p2.x)/2 - offsetX, (p1.y + p2.y)/2 - offsetY ]);
                     
+                    // Line 1 (Forward)
                     const line1 = L.polyline([pos1, midPoint1, pos2], { color: getSnrColor(link.snr), weight: 3 });
-                    line1.bindTooltip(`${link.snr}`, { permanent: true, direction: 'center', className: 'snr-label' });
+                    const tooltipContent1 = `From: ${node1.short_name} (${node1.node_id_hex})<br>To: ${node2.short_name} (${node2.node_id_hex})<br>SNR: ${link.snr} dB`;
+                    line1.bindTooltip(tooltipContent1);
+                    line1.on('click', () => {
+                        const bounds = L.latLngBounds([pos1, pos2]);
+                        map.fitBounds(bounds.pad(0.1)); 
+                    });
                     snrLayer.addLayer(line1);
+                    const labelMarker1 = L.marker(midPoint1, { icon: L.divIcon({ className: 'snr-label-icon', html:'' }), interactive: false });
+                    labelMarker1.bindTooltip(`${link.snr}`, { permanent: true, direction: 'center', className: 'snr-label' });
+                    snrLayer.addLayer(labelMarker1);
                     
+                    // Line 2 (Reverse)
                     const line2 = L.polyline([pos1, midPoint2, pos2], { color: getSnrColor(reverseLink.snr), weight: 3 });
-                    line2.bindTooltip(`${reverseLink.snr}`, { permanent: true, direction: 'center', className: 'snr-label' });
+                    const tooltipContent2 = `From: ${node2.short_name} (${node2.node_id_hex})<br>To: ${node1.short_name} (${node1.node_id_hex})<br>SNR: ${reverseLink.snr} dB`;
+                    line2.bindTooltip(tooltipContent2);
+                    line2.on('click', () => {
+                        const bounds = L.latLngBounds([pos1, pos2]);
+                        map.fitBounds(bounds.pad(0.1));
+                    });
                     snrLayer.addLayer(line2);
+                    const labelMarker2 = L.marker(midPoint2, { icon: L.divIcon({ className: 'snr-label-icon', html:'' }), interactive: false });
+                    labelMarker2.bindTooltip(`${reverseLink.snr}`, { permanent: true, direction: 'center', className: 'snr-label' });
+                    snrLayer.addLayer(labelMarker2);
+
 
                 } else {
                     // Unidirectional link, draw a straight line
                     const line = L.polyline([pos1, pos2], { color: getSnrColor(link.snr), weight: 3 });
-                    line.bindTooltip(`${link.snr}`, { permanent: true, direction: 'center', className: 'snr-label' });
+                    const tooltipContent = `From: ${node1.short_name} (${node1.node_id_hex})<br>To: ${node2.short_name} (${node2.node_id_hex})<br>SNR: ${link.snr} dB`;
+                    line.bindTooltip(tooltipContent);
+                    line.on('click', () => {
+                        const bounds = L.latLngBounds([pos1, pos2]);
+                        map.fitBounds(bounds.pad(0.1)); 
+                    });
                     snrLayer.addLayer(line);
+                    
+                    const midPoint = L.latLng((pos1.lat + pos2.lat) / 2, (pos1.lng + pos2.lng) / 2);
+                    const labelMarker = L.marker(midPoint, { icon: L.divIcon({ className: 'snr-label-icon', html:'' }), interactive: false });
+                    labelMarker.bindTooltip(`${link.snr}`, { permanent: true, direction: 'center', className: 'snr-label' });
+                    snrLayer.addLayer(labelMarker);
                 }
             });
         }
@@ -798,6 +872,9 @@ try {
                 drawSnrLines();
             }
         });
+        
+        // Initial call to set the list correctly on page load.
+        map.whenReady(updateNodeListVisibility);
 
     </script>
 
