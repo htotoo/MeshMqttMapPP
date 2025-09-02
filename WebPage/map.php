@@ -10,8 +10,9 @@ $db_path = '/home/totoo/projects/meshlogger/build/nodes.db';
 
 // --- DATABASE CONNECTION & DATA FETCHING ---
 $nodes = [];
+$snr_data = [];
 $chat_messages = [];
-$node_count = 0; 
+$node_count = 0;
 
 // --- Handle Sorting ---
 $sort_by = $_GET['sort'] ?? 'last_updated'; // Default to last_updated
@@ -67,7 +68,12 @@ try {
     }
     $node_count = count($nodes);
 
-    // 3. Fetch chat messages from the last 5 days
+    // 3. Fetch SNR data from the last 2 weeks
+    $snr_stmt = $db->query("SELECT node1, node2, snr FROM snr WHERE last_updated >= date('now', '-14 days')");
+    $snr_data = $snr_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+
+    // 4. Fetch chat messages from the last 5 days
     $chat_stmt = $db->query("SELECT node_id, message, timestamp, freq FROM chat WHERE timestamp >= date('now', '-5 days') ORDER BY timestamp DESC");
     $chat_rows = $chat_stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($chat_rows as $chat_row) {
@@ -132,11 +138,23 @@ try {
             flex-grow: 1; /* Let this section grow to fill available space */
             transition: height 0.3s ease;
             overflow: hidden; /* Prevent content from spilling out during transition */
+            position: relative; /* Needed for positioning the SNR toggle */
         }
         #map {
             flex: 1;
             height: 100%;
             background-color: #f0f0f0;
+        }
+        #snr-toggle-container {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 8px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-size: 14px;
         }
         #node-list-panel {
             width: 350px;
@@ -298,6 +316,17 @@ try {
 			color: white;
 		}
 
+        .snr-label {
+            background-color: rgba(255, 255, 255, 0.7);
+            border: none;
+            border-radius: 3px;
+            box-shadow: none;
+            padding: 2px 5px;
+            font-size: 12px;
+            font-weight: bold;
+            color: #333;
+        }
+
         /* --- MOBILE RESPONSIVENESS --- */
         @media (max-width: 768px) {
             #node-list-panel {
@@ -338,6 +367,16 @@ try {
                 <span id="panel-toggle-btn">&laquo;</span>
             </div>
             <div id="map"></div>
+            <div id="snr-toggle-container">
+                <div>
+                  <input type="checkbox" id="snr-toggle" />
+                  <label for="snr-toggle">Show SNR</label>
+                </div>
+                <div>
+                  <input type="checkbox" id="hide-stale-toggle" />
+                  <label for="hide-stale-toggle">Hide Stale Nodes</label>
+                </div>
+            </div>
         </div>
         <div id="bottom-panel">
             <div id="chat-header">
@@ -398,6 +437,8 @@ try {
         const bottomPanel = document.getElementById('bottom-panel');
         const chatHeader = document.getElementById('chat-header');
         const chatToggleBtn = document.getElementById('chat-toggle-btn');
+        const snrToggle = document.getElementById('snr-toggle');
+        const hideStaleToggle = document.getElementById('hide-stale-toggle');
 
         // --- MAP INITIALIZATION ---
         const map = L.map(mapElement).setView([47.4979, 19.0402], 7);
@@ -408,6 +449,7 @@ try {
 
         // --- DATA & UI ---
         const nodes = <?php echo json_encode($nodes); ?>;
+        const snrData = <?php echo json_encode($snr_data); ?>;
         const markerLayer = {};
         
         // --- CUSTOM MARKER ICONS ---
@@ -431,10 +473,21 @@ try {
 
 
         // Create a MarkerClusterGroup with options
-        const markersCluster = L.markerClusterGroup({
+        const activeMarkersCluster = L.markerClusterGroup({
             maxClusterRadius: 20,
-            disableClusteringAtZoom: 20 // At zoom n+, markers won't be clustered
+            disableClusteringAtZoom: 20
         });
+        const staleMarkersCluster = L.markerClusterGroup({
+            maxClusterRadius: 20,
+            disableClusteringAtZoom: 20
+        });
+        
+        // Layer for individual markers when clustering is off
+        const activeIndividualMarkersLayer = L.layerGroup();
+        const staleIndividualMarkersLayer = L.layerGroup();
+        // Layer for SNR lines
+        const snrLayer = L.layerGroup();
+
 
         // --- PANEL TOGGLE LOGIC ---
         panelToggleBtn.parentElement.addEventListener('click', () => {
@@ -449,28 +502,76 @@ try {
             setTimeout(() => map.invalidateSize(), 300);
         });
 
+        // --- Function to generate popup content dynamically ---
+        function generatePopupContent(node) {
+            let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}`;
+            if (node.battery_level > 0) {
+                content += `<br>🔋 ${node.battery_level}%`;
+            }
+            const temp = parseFloat(node.temperature);
+            if (temp !== 0) {
+                content += `<br>🌡️ ${temp.toFixed(1)}°C`;
+            }
+
+            if (snrToggle.checked) {
+                const nodesById = Object.fromEntries(nodes.map(n => [n.node_id, n]));
+                const snrTo = [];
+                const snrFrom = [];
+
+                snrData.forEach(link => {
+                    // SNR to this node
+                    if (link.node2 === node.node_id) {
+                        const sourceNode = nodesById[link.node1];
+                        if (sourceNode) {
+                            snrTo.push(`${sourceNode.short_name} (${sourceNode.node_id_hex}): ${link.snr} dB`);
+                        }
+                    }
+                    // SNR from this node
+                    if (link.node1 === node.node_id) {
+                        const destNode = nodesById[link.node2];
+                        if (destNode) {
+                            snrFrom.push(`${destNode.short_name} (${destNode.node_id_hex}): ${link.snr} dB`);
+                        }
+                    }
+                });
+
+                if (snrTo.length > 0) {
+                    content += `<br><br><b>SNR to this node:</b><br>${snrTo.join('<br>')}`;
+                }
+                if (snrFrom.length > 0) {
+                    content += `<br><br><b>SNR from this node:</b><br>${snrFrom.join('<br>')}`;
+                }
+            }
+            return content;
+        }
+
         // --- Create Map Markers ---
         nodes.forEach(node => {
             if (node.latitude !== 0 || node.longitude !== 0) {
                 const iconToUse = node.is_stale ? redIcon : blueIcon;
+                const popupFunction = () => generatePopupContent(node);
+
                 const marker = L.marker([node.latitude, node.longitude], { icon: iconToUse });
-                
-                let popupContent = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}`;
-                if (node.battery_level > 0) {
-                    popupContent += `<br>🔋 ${node.battery_level}%`;
-                }
-                const temp = parseFloat(node.temperature);
-                if (temp !== 0) {
-                    popupContent += `<br>🌡️ ${temp.toFixed(1)}°C`;
-                }
-                marker.bindPopup(popupContent);
+                marker.bindPopup(popupFunction);
                 
                 markerLayer[node.node_id] = marker;
-                markersCluster.addLayer(marker);
+                
+                const individualMarker = L.marker([node.latitude, node.longitude], { icon: iconToUse });
+                individualMarker.node_id = node.node_id; // Add unique ID to marker
+                individualMarker.bindPopup(popupFunction);
+
+                if (node.is_stale) {
+                    staleMarkersCluster.addLayer(marker);
+                    staleIndividualMarkersLayer.addLayer(individualMarker);
+                } else {
+                    activeMarkersCluster.addLayer(marker);
+                    activeIndividualMarkersLayer.addLayer(individualMarker);
+                }
             }
         });
         
-        map.addLayer(markersCluster);
+        map.addLayer(activeMarkersCluster);
+        map.addLayer(staleMarkersCluster);
 
         // --- Populate Node List Panel ---
         if (nodes.length > 0) {
@@ -506,10 +607,22 @@ try {
                     nodeItem.addEventListener('click', () => {
                         const marker = markerLayer[node.node_id];
                         if (marker) {
-                            map.setView([node.latitude, node.longitude], 13);
-                            markersCluster.zoomToShowLayer(marker, function() {
-							  marker.openPopup();
-							});
+                            const isSnrActive = snrToggle.checked;
+                            map.setView([node.latitude, node.longitude], isSnrActive ? 15 : 13);
+
+                            if (isSnrActive) {
+                                const targetLayer = node.is_stale ? staleIndividualMarkersLayer : activeIndividualMarkersLayer;
+                                targetLayer.eachLayer(indMarker => {
+                                    if (indMarker.node_id === node.node_id) {
+                                        indMarker.openPopup();
+                                    }
+                                });
+                            } else {
+                                const targetCluster = node.is_stale ? staleMarkersCluster : activeMarkersCluster;
+                                targetCluster.zoomToShowLayer(marker, function() {
+    							    marker.openPopup();
+    							});
+                            }
                         }
                     });
                 }
@@ -517,26 +630,34 @@ try {
             });
             
             if (Object.keys(markerLayer).length > 0) {
-                map.fitBounds(markersCluster.getBounds().pad(0.2));
+                 const allMarkersGroup = L.featureGroup([activeMarkersCluster, staleMarkersCluster]);
+                map.fitBounds(allMarkersGroup.getBounds().pad(0.2));
             }
 
         } else {
             nodeListElement.innerHTML = '<div style="padding: 15px; text-align: center; color: #6c757d;">No nodes found.</div>';
         }
 
-        // --- NODE LIST FILTER LOGIC ---
-        nodeFilterInput.addEventListener('keyup', () => {
+        // --- NODE LIST FILTER & VISIBILITY LOGIC ---
+        function updateNodeListVisibility() {
             const filterValue = nodeFilterInput.value.toLowerCase();
+            const hideStale = hideStaleToggle.checked;
             const allNodeItems = nodeListElement.querySelectorAll('.node-item');
 
             allNodeItems.forEach(item => {
-                if (item.dataset.filterText.includes(filterValue)) {
+                const isStale = item.classList.contains('stale-node');
+                const matchesFilter = item.dataset.filterText.includes(filterValue);
+
+                if (matchesFilter && (!hideStale || !isStale)) {
                     item.style.display = '';
                 } else {
                     item.style.display = 'none';
                 }
             });
-        });
+        }
+        nodeFilterInput.addEventListener('keyup', updateNodeListVisibility);
+        hideStaleToggle.addEventListener('change', updateNodeListVisibility);
+
 
         // --- CHAT SENDER CLICK LOGIC ---
         document.querySelectorAll('.chat-sender-link').forEach(link => {
@@ -547,14 +668,139 @@ try {
                 const node = nodes.find(n => n.node_id == nodeId);
 
                 if (marker && node) {
-                    map.setView([node.latitude, node.longitude], 13);
-					markersCluster.zoomToShowLayer(marker, function() {
-					  marker.openPopup();
-					});
+                    const isSnrActive = snrToggle.checked;
+                    map.setView([node.latitude, node.longitude], isSnrActive ? 15 : 13);
+                    if (!isSnrActive) {
+                        const targetCluster = node.is_stale ? staleMarkersCluster : activeMarkersCluster;
+                        targetCluster.zoomToShowLayer(marker, function() {
+                            marker.openPopup();
+                        });
+                    } else {
+                        const targetLayer = node.is_stale ? staleIndividualMarkersLayer : activeIndividualMarkersLayer;
+                        targetLayer.eachLayer(indMarker => {
+                            if (indMarker.node_id == nodeId) {
+                                indMarker.openPopup();
+                            }
+                        });
+                    }
                 }
             });
         });
+
+        // --- SNR TOGGLE LOGIC ---
+        function getSnrColor(snr) {
+            // Clamp SNR between -20 and 0 for color calculation
+            const clampedSnr = Math.max(-20, Math.min(snr, 0));
+            // Calculate percentage from -20 (0%) to 0 (100%)
+            const percentage = (clampedSnr + 20) / 20;
+
+            // Interpolate between red (0%) and green (100%)
+            const red = 255 * (1 - percentage);
+            const green = 255 * percentage;
+            const blue = 0;
+
+            return `rgb(${Math.round(red)}, ${Math.round(green)}, ${Math.round(blue)})`;
+        }
+
+        function drawSnrLines() {
+            snrLayer.clearLayers();
+            const processedPairs = new Set();
+            const nodesById = Object.fromEntries(nodes.map(n => [n.node_id, n]));
+
+            snrData.forEach(link => {
+                const pairKeyFwd = `${link.node1}-${link.node2}`;
+                const pairKeyRev = `${link.node2}-${link.node1}`;
+
+                if (processedPairs.has(pairKeyFwd) || processedPairs.has(pairKeyRev)) return;
+
+                const node1 = nodesById[link.node1];
+                const node2 = nodesById[link.node2];
+
+                if (!node1 || !node2 || (node1.latitude === 0 && node1.longitude === 0) || (node2.latitude === 0 && node2.longitude === 0)) return;
+
+                const pos1 = L.latLng(node1.latitude, node1.longitude);
+                const pos2 = L.latLng(node2.latitude, node2.longitude);
+
+                const reverseLink = snrData.find(r => r.node1 == link.node2 && r.node2 == link.node1);
+
+                if (reverseLink) {
+                    // Bidirectional link, draw two curved lines
+                    processedPairs.add(pairKeyFwd);
+                    processedPairs.add(pairKeyRev);
+
+                    const p1 = map.latLngToContainerPoint(pos1);
+                    const p2 = map.latLngToContainerPoint(pos2);
+                    
+                    const distance = p1.distanceTo(p2);
+                    const offset = Math.min(20, distance * 0.15); // Dynamic offset
+
+                    const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                    const offsetX = offset * Math.sin(angle);
+                    const offsetY = -offset * Math.cos(angle);
+
+                    const midPoint1 = map.containerPointToLatLng([ (p1.x + p2.x)/2 + offsetX, (p1.y + p2.y)/2 + offsetY ]);
+                    const midPoint2 = map.containerPointToLatLng([ (p1.x + p2.x)/2 - offsetX, (p1.y + p2.y)/2 - offsetY ]);
+                    
+                    const line1 = L.polyline([pos1, midPoint1, pos2], { color: getSnrColor(link.snr), weight: 3 });
+                    line1.bindTooltip(`${link.snr}`, { permanent: true, direction: 'center', className: 'snr-label' });
+                    snrLayer.addLayer(line1);
+                    
+                    const line2 = L.polyline([pos1, midPoint2, pos2], { color: getSnrColor(reverseLink.snr), weight: 3 });
+                    line2.bindTooltip(`${reverseLink.snr}`, { permanent: true, direction: 'center', className: 'snr-label' });
+                    snrLayer.addLayer(line2);
+
+                } else {
+                    // Unidirectional link, draw a straight line
+                    const line = L.polyline([pos1, pos2], { color: getSnrColor(link.snr), weight: 3 });
+                    line.bindTooltip(`${link.snr}`, { permanent: true, direction: 'center', className: 'snr-label' });
+                    snrLayer.addLayer(line);
+                }
+            });
+        }
+
+        function updateMapView() {
+            const showSnr = snrToggle.checked;
+            const hideStale = hideStaleToggle.checked;
+
+            // --- Remove all possible layers first ---
+            [activeMarkersCluster, staleMarkersCluster, activeIndividualMarkersLayer, staleIndividualMarkersLayer, snrLayer].forEach(layer => {
+                if (map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                }
+            });
+
+            if (showSnr) {
+                // --- Add individual marker layers ---
+                map.addLayer(activeIndividualMarkersLayer);
+                if (!hideStale) {
+                    map.addLayer(staleIndividualMarkersLayer);
+                }
+                // --- Add SNR lines ---
+                drawSnrLines();
+                map.addLayer(snrLayer);
+            } else {
+                // --- Add cluster layers ---
+                map.addLayer(activeMarkersCluster);
+                 if (!hideStale) {
+                    map.addLayer(staleMarkersCluster);
+                }
+            }
+        }
+
+
+        snrToggle.addEventListener('change', updateMapView);
+        hideStaleToggle.addEventListener('change', updateMapView);
+
+
+        // Redraw lines on zoom to adjust curves
+        map.on('zoomend', function() {
+            if (snrToggle.checked) {
+                drawSnrLines();
+            }
+        });
+
     </script>
 
 </body>
 </html>
+

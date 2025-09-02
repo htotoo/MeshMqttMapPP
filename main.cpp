@@ -90,12 +90,26 @@ void m_on_telemetry_environment(MC_Header& header, MC_Telemetry_Environment& tel
 
 void m_on_traceroute(MC_Header& header, MC_RouteDiscovery& route, bool for_me, bool is_reply, bool need_reply) {
     if (messageIdTracker.check(header.packet_id)) {
-        return;
+        // return; //need to get the same multiple times, since the same message will get more and more data
     }
-    printf("Traceroute from node 0x%08" PRIx32 ": Route Count: %d\n", header.srcnode, route.route_count);
     // Print the route details if needed
+    uint32_t n1 = (route.route_back_count > 0) ? header.dstnode : header.srcnode;
+    printf("Traceroute from node 0x%08" PRIx32 ": Route Count: %d\n", n1, route.route_count);
     for (int i = 0; i < route.route_count; i++) {
-        printf("Route[%d]: Node 0x%08" PRIx32 ", SNR: %d\n", i, route.route[i], route.snr_towards[i]);
+        printf("Route[%d]: Node 0x%08" PRIx32 ", SNR: %d\n", i, route.route[i], route.snr_towards[i] / 4);
+        printf("0x%08" PRIx32 " -> 0x%08" PRIx32 "  : %d\n", n1, route.route[i], route.snr_towards[i] / 4);
+        nodeDb.saveNodeSNR(n1, route.route[i], route.snr_towards[i] / 4);
+        n1 = route.route[i];
+    }
+    if (route.route_back_count > 0) {
+        nodeDb.saveNodeSNR(n1, header.srcnode, route.snr_towards[route.route_count + 1]);
+    }
+    n1 = (route.route_back_count > 0) ? header.srcnode : header.dstnode;
+    for (int i = 0; i < route.route_back_count; i++) {
+        printf("Back[%d]: Node 0x%08" PRIx32 ", SNR: %d\n", i, route.route_back[i], route.snr_back[i] / 4);
+        nodeDb.saveNodeSNR(n1, route.route_back[i], route.snr_back[i] / 4);
+        printf("0x%08" PRIx32 " -> 0x%08" PRIx32 "  : %d\n", n1, route.route_back[i], route.snr_back[i] / 4);
+        n1 = route.route_back[i];
     }
 }
 

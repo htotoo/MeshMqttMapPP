@@ -151,6 +151,25 @@ class NodeDb {
         sqlite3_finalize(stmt);
     }
 
+    void saveNodeSNR(uint32_t nodeId1, uint32_t nodeId2, float snr) {
+        std::lock_guard<std::mutex> lock(mtx);
+        if (!db) return;
+        sqlite3_stmt* stmt;
+        const char* sql = "INSERT INTO snr (node1, node2, snr, last_updated) VALUES (?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(node1, node2) DO UPDATE SET snr = excluded.snr, last_updated = CURRENT_TIMESTAMP";
+        if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+            sqlite3_bind_int(stmt, 1, nodeId1);
+            sqlite3_bind_int(stmt, 2, nodeId2);
+            sqlite3_bind_double(stmt, 3, snr);
+
+            if (sqlite3_step(stmt) != SQLITE_DONE) {
+                std::cerr << "Error saving node SNR: " << sqlite3_errmsg(db) << std::endl;
+            }
+        } else {
+            std::cerr << "Error preparing statement: " << sqlite3_errmsg(db) << std::endl;
+        }
+        sqlite3_finalize(stmt);
+    }
+
    private:
     void createTables() {
         const char* sql =
@@ -173,7 +192,8 @@ class NodeDb {
             "message TEXT, "
             "freq INTEGER, "
             "timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP);";
-        const char* sql3 = "CREATE TABLE IF NOT EXISTS snr ("
+        const char* sql3 =
+            "CREATE TABLE IF NOT EXISTS snr ("
             "node1        INTEGER,"
             "node2        INTEGER,"
             "snr          INTEGER,"
@@ -190,11 +210,11 @@ class NodeDb {
             if (sqlite3_exec(db, sql2, nullptr, nullptr, &errMsg) != SQLITE_OK) {
                 std::cerr << "SQL error: " << errMsg << std::endl;
                 sqlite3_free(errMsg);
-            }       
+            }
             if (sqlite3_exec(db, sql3, nullptr, nullptr, &errMsg) != SQLITE_OK) {
                 std::cerr << "SQL error: " << errMsg << std::endl;
                 sqlite3_free(errMsg);
-            }   
+            }
             if (sqlite3_exec(db, sql4, nullptr, nullptr, &errMsg) != SQLITE_OK) {
                 std::cerr << "SQL error: " << errMsg << std::endl;
                 sqlite3_free(errMsg);
