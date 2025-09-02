@@ -168,8 +168,9 @@ int MeshMqttClient::messageArrived(void* context, char* topicName, int topicLen,
         freq = 433;
     }
     MeshMqttClient* client = static_cast<MeshMqttClient*>(context);
+    printf("topic: %s\n", topicName);
     client->ProcessPacket(static_cast<uint8_t*>(message->payload), message->payloadlen, freq);
-
+    printf("\n");
     MQTTClient_freeMessage(&message);
     MQTTClient_free(topicName);
     return 1;
@@ -419,16 +420,12 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                     // printf("Failed to decode RouteDiscovery");
                 }
             } else if (decodedtmp.portnum == 71) {
-                // printf("Received a NEIGHBORINFO_APP   packet");
+                printf("Received a NEIGHBORINFO_APP   packet");
                 // payload: Protobuf ?
             } else {
-                // printf("Received an unhandled portnum: %d", decodedtmp.portnum);
+                printf("Received an unhandled portnum: %d", decodedtmp.portnum);
             }
-            // if (header.want_ack && is_send_enabled && !is_in_stealth_mode && header.dstnode == my_nodeinfo.node_id) {
-            //  send_ack(header);
-            //}
         }
-        // printf("\r\n");
         return ret;
     }
     return false;

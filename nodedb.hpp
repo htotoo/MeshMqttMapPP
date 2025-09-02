@@ -173,6 +173,13 @@ class NodeDb {
             "message TEXT, "
             "freq INTEGER, "
             "timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP);";
+        const char* sql3 = "CREATE TABLE IF NOT EXISTS snr ("
+            "node1        INTEGER,"
+            "node2        INTEGER,"
+            "snr          INTEGER,"
+            "last_updated TIMESTAMP DEFAULT (CURRENT_TIMESTAMP) );";
+        const char* sql4 = "CREATE UNIQUE INDEX IF NOT EXISTS n1n2 ON snr ( node1, node2);";
+
         if (db) {
             char* errMsg = nullptr;
             if (sqlite3_exec(db, sql, nullptr, nullptr, &errMsg) != SQLITE_OK) {
@@ -181,6 +188,14 @@ class NodeDb {
                 errMsg = nullptr;
             }
             if (sqlite3_exec(db, sql2, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+                std::cerr << "SQL error: " << errMsg << std::endl;
+                sqlite3_free(errMsg);
+            }       
+            if (sqlite3_exec(db, sql3, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+                std::cerr << "SQL error: " << errMsg << std::endl;
+                sqlite3_free(errMsg);
+            }   
+            if (sqlite3_exec(db, sql4, nullptr, nullptr, &errMsg) != SQLITE_OK) {
                 std::cerr << "SQL error: " << errMsg << std::endl;
                 sqlite3_free(errMsg);
             }

@@ -322,7 +322,7 @@ try {
         <div id="top-section">
             <div id="node-list-panel">
                 <div id="panel-header">
-                    <span>All Nodes (<?php echo $node_count; ?>)</span>
+                    <span><a href="/">🏡</a></span><span>All Nodes (<?php echo $node_count; ?>)</span>
                 </div>
                 <div id="filter-container">
                     <input type="text" id="node-filter-input" placeholder="Filter by name or ID...">
