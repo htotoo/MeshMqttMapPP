@@ -92,6 +92,10 @@ void m_on_traceroute(MC_Header& header, MC_RouteDiscovery& route, bool for_me, b
     if (messageIdTracker.check(header.packet_id)) {
         // return; //need to get the same multiple times, since the same message will get more and more data
     }
+    if (header.via_mqtt) {
+        printf("Skip bc mqtt\n");
+        return;
+    }
     // Print the route details if needed
     uint32_t n1 = (route.route_back_count > 0) ? header.dstnode : header.srcnode;
     printf("Traceroute from node 0x%08" PRIx32 ": Route Count: %d\n", n1, route.route_count);

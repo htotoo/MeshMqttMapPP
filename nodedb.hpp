@@ -152,6 +152,7 @@ class NodeDb {
     }
 
     void saveNodeSNR(uint32_t nodeId1, uint32_t nodeId2, float snr) {
+        if (nodeId1 == nodeId2) return;  // Skip exotic case
         std::lock_guard<std::mutex> lock(mtx);
         if (!db) return;
         sqlite3_stmt* stmt;
