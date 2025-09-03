@@ -31,8 +31,8 @@ try {
 
     // 2. Fetch all nodes and create a lookup map, using the selected order
     $node_map = [];
-    // Updated query to fetch new fields and apply sorting
-    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature FROM nodes ' . $order_by_sql);
+    // Updated query to fetch new 'freq' field and apply sorting
+    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq FROM nodes ' . $order_by_sql);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as $row) {
         $hex = sprintf('%x', $row['node_id']);
@@ -61,6 +61,7 @@ try {
             'last_updated' => $row['last_updated'], // Pass the raw timestamp
             'battery_level' => $row['battery_level'] ?? 0,
             'temperature' => $row['temperature'] ?? 0.0,
+            'freq' => $row['freq'] ?? 0, // Add the new frequency field
             'is_stale' => $is_stale // Add the stale flag
         ];
         $nodes[] = $node_data;
@@ -113,9 +114,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Node Map</title>
 
-    <!-- Leaflet CSS for the map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-    <!-- Leaflet.markercluster CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
 
@@ -398,6 +397,15 @@ try {
                   <input type="checkbox" id="hide-stale-toggle" />
                   <label for="hide-stale-toggle">Hide Stale Nodes</label>
                 </div>
+                <hr style="border-top: 1px solid #ccc; margin: 4px 0;">
+                <div>
+                  <input type="checkbox" id="freq-433-toggle" checked />
+                  <label for="freq-433-toggle">Show 433 MHz</label>
+                </div>
+                <div>
+                  <input type="checkbox" id="freq-868-toggle" checked />
+                  <label for="freq-868-toggle">Show 868 MHz</label>
+                </div>
             </div>
         </div>
         <div id="bottom-panel">
@@ -425,9 +433,7 @@ try {
         </div>
     </div>
 
-    <!-- Leaflet JavaScript library -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <!-- Leaflet.markercluster JavaScript -->
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 
     <script>
@@ -462,6 +468,8 @@ try {
         const snrToggle = document.getElementById('snr-toggle');
         const hideStaleToggle = document.getElementById('hide-stale-toggle');
         const filterByMapViewToggle = document.getElementById('filter-by-map-view-toggle');
+        const freq433Toggle = document.getElementById('freq-433-toggle');
+        const freq868Toggle = document.getElementById('freq-868-toggle');
 
         // --- MAP INITIALIZATION ---
         const map = L.map(mapElement).setView([47.4979, 19.0402], 7);
@@ -535,6 +543,10 @@ try {
         // --- Function to generate popup content dynamically ---
         function generatePopupContent(node) {
             let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}`;
+            
+            if (node.freq > 0) {
+                content += `<br>F: ${node.freq} MHz`;
+            }
             if (node.battery_level > 0) {
                 content += `<br>🔋 ${node.battery_level}%`;
             }
@@ -591,19 +603,10 @@ try {
                 individualMarker.bindPopup(popupFunction);
                 individualMarkerLayer[node.node_id] = individualMarker; // Add to new lookup
 
-                if (node.is_stale) {
-                    staleMarkersCluster.addLayer(marker);
-                    staleIndividualMarkersLayer.addLayer(individualMarker);
-                } else {
-                    activeMarkersCluster.addLayer(marker);
-                    activeIndividualMarkersLayer.addLayer(individualMarker);
-                }
+                // Markers are added to layers dynamically by updateMapView()
             }
         });
         
-        map.addLayer(activeMarkersCluster);
-        map.addLayer(staleMarkersCluster);
-
         // --- Populate Node List Panel ---
         if (nodes.length > 0) {
             nodes.forEach(node => {
@@ -615,9 +618,12 @@ try {
                 }
                 
                 nodeItem.dataset.nodeId = node.node_id; // For linking list item to node data
-                nodeItem.dataset.filterText = `${node.long_name} ${node.short_name} ${node.node_id_hex}`.toLowerCase();
+                nodeItem.dataset.filterText = `${node.long_name} ${node.short_name} ${node.node_id_hex} ${node.freq}`.toLowerCase();
                 
                 let statsHtml = '';
+                if (node.freq > 0) {
+                     statsHtml += `<span>F: ${node.freq} MHz</span>`;
+                }
                 if (node.battery_level > 0) {
                     statsHtml += `<span>🔋 ${node.battery_level}%</span>`;
                 }
@@ -643,9 +649,10 @@ try {
                 nodeListElement.appendChild(nodeItem);
             });
             
+            // Fit map bounds initially based on ALL markers, before any filtering
             if (Object.keys(markerLayer).length > 0) {
-                 const allMarkersGroup = L.featureGroup([activeMarkersCluster, staleMarkersCluster]);
-                map.fitBounds(allMarkersGroup.getBounds().pad(0.2));
+                 const allMarkersGroup = L.featureGroup(Object.values(markerLayer));
+                 map.fitBounds(allMarkersGroup.getBounds().pad(0.2));
             }
 
         } else {
@@ -656,18 +663,23 @@ try {
         function updateNodeListVisibility() {
             const filterValue = nodeFilterInput.value.toLowerCase();
             const hideStale = hideStaleToggle.checked;
+            const show433 = freq433Toggle.checked;
+            const show868 = freq868Toggle.checked;
             const filterByView = filterByMapViewToggle.checked;
             const mapBounds = map.getBounds();
             const allNodeItems = nodeListElement.querySelectorAll('.node-item');
 
             allNodeItems.forEach(item => {
-                const isStale = item.classList.contains('stale-node');
-                const matchesFilter = item.dataset.filterText.includes(filterValue);
+                const nodeId = item.dataset.nodeId;
+                const node = nodes.find(n => n.node_id == nodeId);
+                if (!node) return;
+
+                const matchesFilterText = item.dataset.filterText.includes(filterValue);
+                const matchesStale = !hideStale || !node.is_stale;
+                const matchesFreq = !( (!show433 && node.freq == 433) || (!show868 && node.freq == 868) );
                 
-                let isVisibleOnMap = true; // Default to true
+                let isVisibleOnMap = true;
                 if (filterByView) {
-                    const nodeId = item.dataset.nodeId;
-                    const node = nodes.find(n => n.node_id == nodeId);
                     if (node && (node.latitude !== 0 || node.longitude !== 0)) {
                         isVisibleOnMap = mapBounds.contains([node.latitude, node.longitude]);
                     } else {
@@ -675,7 +687,7 @@ try {
                     }
                 }
 
-                if (matchesFilter && (!hideStale || !isStale) && isVisibleOnMap) {
+                if (matchesFilterText && matchesStale && matchesFreq && isVisibleOnMap) {
                     item.style.display = '';
                 } else {
                     item.style.display = 'none';
@@ -683,7 +695,6 @@ try {
             });
         }
         nodeFilterInput.addEventListener('keyup', updateNodeListVisibility);
-        hideStaleToggle.addEventListener('change', updateNodeListVisibility);
         filterByMapViewToggle.addEventListener('change', updateNodeListVisibility);
         map.on('moveend', updateNodeListVisibility); // Update list when map moves
 
@@ -734,23 +745,21 @@ try {
 
         // --- SNR TOGGLE LOGIC ---
         function getSnrColor(snr) {
-            // Clamp SNR between -20 and 0 for color calculation
             const clampedSnr = Math.max(-20, Math.min(snr, 0));
-            // Calculate percentage from -20 (0%) to 0 (100%)
             const percentage = (clampedSnr + 20) / 20;
-
-            // Interpolate between red (0%) and green (100%)
             const red = 255 * (1 - percentage);
             const green = 255 * percentage;
-            const blue = 0;
-
-            return `rgb(${Math.round(red)}, ${Math.round(green)}, ${Math.round(blue)})`;
+            return `rgb(${Math.round(red)}, ${Math.round(green)}, 0)`;
         }
 
         function drawSnrLines() {
             snrLayer.clearLayers();
             const processedPairs = new Set();
             const nodesById = Object.fromEntries(nodes.map(n => [n.node_id, n]));
+            
+            const show433 = freq433Toggle.checked;
+            const show868 = freq868Toggle.checked;
+            const hideStale = hideStaleToggle.checked;
 
             snrData.forEach(link => {
                 const pairKeyFwd = `${link.node1}-${link.node2}`;
@@ -763,65 +772,48 @@ try {
 
                 if (!node1 || !node2 || (node1.latitude === 0 && node1.longitude === 0) || (node2.latitude === 0 && node2.longitude === 0)) return;
 
+                // Check if both nodes are visible based on filters
+                const node1Visible = !((!show433 && node1.freq == 433) || (!show868 && node1.freq == 868)) && (!hideStale || !node1.is_stale);
+                const node2Visible = !((!show433 && node2.freq == 433) || (!show868 && node2.freq == 868)) && (!hideStale || !node2.is_stale);
+                
+                if (!node1Visible || !node2Visible) return; // Skip if either node is filtered out
+
                 const pos1 = L.latLng(node1.latitude, node1.longitude);
                 const pos2 = L.latLng(node2.latitude, node2.longitude);
 
                 const reverseLink = snrData.find(r => r.node1 == link.node2 && r.node2 == link.node1);
 
                 if (reverseLink) {
-                    // Bidirectional link, draw two curved lines
                     processedPairs.add(pairKeyFwd);
                     processedPairs.add(pairKeyRev);
 
                     const p1 = map.latLngToContainerPoint(pos1);
                     const p2 = map.latLngToContainerPoint(pos2);
-                    
                     const distance = p1.distanceTo(p2);
-                    const offset = Math.min(20, distance * 0.15); // Dynamic offset
-
+                    const offset = Math.min(20, distance * 0.15);
                     const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
                     const offsetX = offset * Math.sin(angle);
                     const offsetY = -offset * Math.cos(angle);
-
                     const midPoint1 = map.containerPointToLatLng([ (p1.x + p2.x)/2 + offsetX, (p1.y + p2.y)/2 + offsetY ]);
                     const midPoint2 = map.containerPointToLatLng([ (p1.x + p2.x)/2 - offsetX, (p1.y + p2.y)/2 - offsetY ]);
                     
-                    // Line 1 (Forward)
                     const line1 = L.polyline([pos1, midPoint1, pos2], { color: getSnrColor(link.snr), weight: 3 });
-                    const tooltipContent1 = `From: ${node1.short_name} (${node1.node_id_hex})<br>To: ${node2.short_name} (${node2.node_id_hex})<br>SNR: ${link.snr} dB`;
-                    line1.bindTooltip(tooltipContent1);
-                    line1.on('click', () => {
-                        const bounds = L.latLngBounds([pos1, pos2]);
-                        map.fitBounds(bounds.pad(0.1)); 
-                    });
+                    line1.bindTooltip(`From: ${node1.short_name}<br>To: ${node2.short_name}<br>SNR: ${link.snr} dB`);
                     snrLayer.addLayer(line1);
                     const labelMarker1 = L.marker(midPoint1, { icon: L.divIcon({ className: 'snr-label-icon', html:'' }), interactive: false });
                     labelMarker1.bindTooltip(`${link.snr}`, { permanent: true, direction: 'center', className: 'snr-label' });
                     snrLayer.addLayer(labelMarker1);
                     
-                    // Line 2 (Reverse)
                     const line2 = L.polyline([pos1, midPoint2, pos2], { color: getSnrColor(reverseLink.snr), weight: 3 });
-                    const tooltipContent2 = `From: ${node2.short_name} (${node2.node_id_hex})<br>To: ${node1.short_name} (${node1.node_id_hex})<br>SNR: ${reverseLink.snr} dB`;
-                    line2.bindTooltip(tooltipContent2);
-                    line2.on('click', () => {
-                        const bounds = L.latLngBounds([pos1, pos2]);
-                        map.fitBounds(bounds.pad(0.1));
-                    });
+                    line2.bindTooltip(`From: ${node2.short_name}<br>To: ${node1.short_name}<br>SNR: ${reverseLink.snr} dB`);
                     snrLayer.addLayer(line2);
                     const labelMarker2 = L.marker(midPoint2, { icon: L.divIcon({ className: 'snr-label-icon', html:'' }), interactive: false });
                     labelMarker2.bindTooltip(`${reverseLink.snr}`, { permanent: true, direction: 'center', className: 'snr-label' });
                     snrLayer.addLayer(labelMarker2);
 
-
                 } else {
-                    // Unidirectional link, draw a straight line
                     const line = L.polyline([pos1, pos2], { color: getSnrColor(link.snr), weight: 3 });
-                    const tooltipContent = `From: ${node1.short_name} (${node1.node_id_hex})<br>To: ${node2.short_name} (${node2.node_id_hex})<br>SNR: ${link.snr} dB`;
-                    line.bindTooltip(tooltipContent);
-                    line.on('click', () => {
-                        const bounds = L.latLngBounds([pos1, pos2]);
-                        map.fitBounds(bounds.pad(0.1)); 
-                    });
+                    line.bindTooltip(`From: ${node1.short_name}<br>To: ${node2.short_name}<br>SNR: ${link.snr} dB`);
                     snrLayer.addLayer(line);
                     
                     const midPoint = L.latLng((pos1.lat + pos2.lat) / 2, (pos1.lng + pos2.lng) / 2);
@@ -835,36 +827,57 @@ try {
         function updateMapView() {
             const showSnr = snrToggle.checked;
             const hideStale = hideStaleToggle.checked;
+            const show433 = freq433Toggle.checked;
+            const show868 = freq868Toggle.checked;
 
-            // --- Remove all possible layers first ---
+            // --- Remove layers from map and clear their contents ---
             [activeMarkersCluster, staleMarkersCluster, activeIndividualMarkersLayer, staleIndividualMarkersLayer, snrLayer].forEach(layer => {
-                if (map.hasLayer(layer)) {
-                    map.removeLayer(layer);
+                if (map.hasLayer(layer)) map.removeLayer(layer);
+                layer.clearLayers();
+            });
+
+            // --- Repopulate marker layers based on current filters ---
+            nodes.forEach(node => {
+                const matchesFreq = !( (!show433 && node.freq == 433) || (!show868 && node.freq == 868) );
+                const matchesStale = !hideStale || !node.is_stale;
+
+                if (matchesFreq && matchesStale && (node.latitude !== 0 || node.longitude !== 0)) {
+                    const marker = markerLayer[node.node_id];
+                    const individualMarker = individualMarkerLayer[node.node_id];
+                    if (marker && individualMarker) {
+                        if (node.is_stale) {
+                            staleMarkersCluster.addLayer(marker);
+                            staleIndividualMarkersLayer.addLayer(individualMarker);
+                        } else {
+                            activeMarkersCluster.addLayer(marker);
+                            activeIndividualMarkersLayer.addLayer(individualMarker);
+                        }
+                    }
                 }
             });
 
+            // --- Add the correct layers back to the map ---
             if (showSnr) {
-                // --- Add individual marker layers ---
                 map.addLayer(activeIndividualMarkersLayer);
-                if (!hideStale) {
-                    map.addLayer(staleIndividualMarkersLayer);
-                }
-                // --- Add SNR lines ---
+                map.addLayer(staleIndividualMarkersLayer);
                 drawSnrLines();
                 map.addLayer(snrLayer);
             } else {
-                // --- Add cluster layers ---
                 map.addLayer(activeMarkersCluster);
-                 if (!hideStale) {
-                    map.addLayer(staleMarkersCluster);
-                }
+                map.addLayer(staleMarkersCluster);
             }
         }
 
+        // --- Add Event Listeners for new toggles ---
+        function onFilterChange() {
+            updateMapView();
+            updateNodeListVisibility();
+        }
 
         snrToggle.addEventListener('change', updateMapView);
-        hideStaleToggle.addEventListener('change', updateMapView);
-
+        hideStaleToggle.addEventListener('change', onFilterChange);
+        freq433Toggle.addEventListener('change', onFilterChange);
+        freq868Toggle.addEventListener('change', onFilterChange);
 
         // Redraw lines on zoom to adjust curves
         map.on('zoomend', function() {
@@ -873,11 +886,13 @@ try {
             }
         });
         
-        // Initial call to set the list correctly on page load.
-        map.whenReady(updateNodeListVisibility);
+        // --- Initial Calls ---
+        map.whenReady(() => {
+            updateMapView();
+            updateNodeListVisibility();
+        });
 
     </script>
 
 </body>
 </html>
-

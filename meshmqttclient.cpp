@@ -164,7 +164,7 @@ void MeshMqttClient::intOnPositionMessage(MC_Header& header, MC_Position& positi
 
 int MeshMqttClient::messageArrived(void* context, char* topicName, int topicLen, MQTTClient_message* message) {
     uint16_t freq = 868;
-    if (topicName && strstr(topicName, "433")) {
+    if (topicName && strstr(topicName, "EU_433")) {
         freq = 433;
     }
     MeshMqttClient* client = static_cast<MeshMqttClient*>(context);
