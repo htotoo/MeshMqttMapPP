@@ -542,6 +542,12 @@ try {
 
         // --- Function to generate popup content dynamically ---
         function generatePopupContent(node) {
+			 // Update URL to include the node ID for sharing
+            const url = new URL(window.location);
+            url.searchParams.set('node', node.node_id);
+            // Use pushState so the back button works as expected
+            history.replaceState({ nodeId: node.node_id }, '', url.toString());
+			
             let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}`;
             
             if (node.freq > 0) {
@@ -555,7 +561,7 @@ try {
                 content += `<br>🌡️ ${temp.toFixed(1)}°C`;
             }
 
-            if (snrToggle.checked) {
+            if (snrToggle.checked || 1) {
                 const nodesById = Object.fromEntries(nodes.map(n => [n.node_id, n]));
                 const snrTo = [];
                 const snrFrom = [];
@@ -708,12 +714,17 @@ try {
         // --- POPUP STATE MANAGEMENT ---
         let isPopupOpen = false;
         map.on('popupopen', () => { isPopupOpen = true; });
-        map.on('popupclose', () => { isPopupOpen = false; });
+
+        // --- NEW --- Event listener to clear URL when popup closes
+        map.on('popupclose', () => {
+            isPopupOpen = false;
+        });
         
         // --- Unified function to open a specific node's popup ---
         function openNodePopup(nodeId) {
             const node = nodes.find(n => n.node_id == nodeId);
             if (!node || (node.latitude === 0 && node.longitude === 0)) return;
+
 
             const doMoveAndOpen = () => {
                 const isSnrActive = snrToggle.checked;
@@ -890,6 +901,19 @@ try {
         map.whenReady(() => {
             updateMapView();
             updateNodeListVisibility();
+            
+            //  Check URL for a node ID on page load
+            const urlParams = new URLSearchParams(window.location.search);
+            const nodeIdFromUrl = urlParams.get('node');
+            if (nodeIdFromUrl) {
+                // Use a small timeout to ensure map animations/loading are complete
+                setTimeout(() => {
+                    const nodeIdNum = parseInt(nodeIdFromUrl, 10);
+                    if (!isNaN(nodeIdNum)) {
+                         openNodePopup(nodeIdNum);
+                    }
+                }, 500);
+            }
         });
 
     </script>
