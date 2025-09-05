@@ -31,8 +31,8 @@ try {
 
     // 2. Fetch all nodes and create a lookup map, using the selected order
     $node_map = [];
-    // Updated query to fetch new 'freq' field and apply sorting
-    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq FROM nodes ' . $order_by_sql);
+    // --- MODIFIED: Added 'role' to the SELECT query ---
+    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role FROM nodes ' . $order_by_sql);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as $row) {
         $hex = sprintf('%x', $row['node_id']);
@@ -61,8 +61,9 @@ try {
             'last_updated' => $row['last_updated'], // Pass the raw timestamp
             'battery_level' => $row['battery_level'] ?? 0,
             'temperature' => $row['temperature'] ?? 0.0,
-            'freq' => $row['freq'] ?? 0, // Add the new frequency field
-            'is_stale' => $is_stale // Add the stale flag
+            'freq' => $row['freq'] ?? 0,
+            'role' => $row['role'] ?? 0, // --- MODIFIED: Added role to the data array ---
+            'is_stale' => $is_stale
         ];
         $nodes[] = $node_data;
         $node_map[$row['node_id']] = $node_data; // Create map for easy lookup
@@ -508,6 +509,17 @@ try {
         const snrData = <?php echo json_encode($snr_data); ?>;
         const markerLayer = {};
         const individualMarkerLayer = {}; // Lookup for non-clustered markers
+
+        // --- MODIFIED: Added Role Mappings ---
+        const ROLE_MAP_LONG = {
+            0: 'Client', 1: 'Client Mute', 2: 'Router', 3: 'Router Client',
+            4: 'Repeater', 5: 'Tracker', 6: 'Sensor', 7: 'TAK',
+            8: 'Client Hidden', 9: 'Lost and Found', 10: 'TAK Tracker', 11: 'Router Late'
+        };
+        const ROLE_MAP_SHORT = {
+            0: 'C', 1: 'CM', 2: 'R', 3: 'RC', 4: 'RP', 5: 'TR',
+            6: 'SN', 7: 'TAK', 8: 'CH', 9: 'LF', 10: 'TT', 11: 'RL'
+        };
         
         // --- CUSTOM MARKER ICONS ---
         const redIcon = new L.Icon({
@@ -573,7 +585,9 @@ try {
             // Use pushState so the back button works as expected
             history.replaceState({ nodeId: node.node_id }, '', url.toString());
 			
-            let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}`;
+            // --- MODIFIED: Added Role to popup content ---
+            const roleText = ROLE_MAP_LONG[node.role] || 'Unknown';
+            let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}<br>Role: ${roleText}`;
             
             if (node.freq > 0) {
                 content += `<br>F: ${node.freq} MHz`;
@@ -651,7 +665,11 @@ try {
                 nodeItem.dataset.nodeId = node.node_id; // For linking list item to node data
                 nodeItem.dataset.filterText = `${node.long_name} ${node.short_name} ${node.node_id_hex} ${node.freq}`.toLowerCase();
                 
+                // --- MODIFIED: Added Role to node list item stats ---
                 let statsHtml = '';
+                const roleShortText = ROLE_MAP_SHORT[node.role] || '??';
+                statsHtml += `<span>Role: ${roleShortText}</span>`;
+
                 if (node.freq > 0) {
                      statsHtml += `<span>F: ${node.freq} MHz</span>`;
                 }
