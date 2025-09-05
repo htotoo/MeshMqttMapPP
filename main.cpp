@@ -59,6 +59,8 @@ void cmd_send(const std::string& parameters) {
         // localClient.sendTextMessage(message, nodeId);
         std::string rt = "msh/EU_868/HU";
         localClient.sendMeshtasticMsg(nodeId, message, rt);
+        rt = "msh/EU_433/HU";
+        localClient.sendMeshtasticMsg(nodeId, message, rt);
     } catch (const std::exception& e) {
         safe_printf("Invalid node ID. Please use hex format (e.g., aabbccdd).\n");
     }
@@ -91,7 +93,7 @@ void m_on_message(MC_Header& header, MC_TextMessage& message) {
 
     std::string telegramMessage = std::to_string(message.chan) + "@" + std::to_string(header.freq) + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
     safe_printf("Telegram: %s\n", telegramMessage.c_str());
-    if (header.srcnode != 0xabbababa) telegramPoster.queueMessage(telegramMessage);
+    telegramPoster.queueMessage(telegramMessage);
 }
 
 void m_on_position_message(MC_Header& header, MC_Position& position, bool needReply) {
