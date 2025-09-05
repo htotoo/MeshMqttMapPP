@@ -31,8 +31,8 @@ try {
 
     // 2. Fetch all nodes and create a lookup map, using the selected order
     $node_map = [];
-    // --- MODIFIED: Added 'role' to the SELECT query ---
-    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role FROM nodes ' . $order_by_sql);
+    // --- MODIFIED: Added 'role' and 'battery_voltage' to the SELECT query ---
+    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role, battery_voltage FROM nodes ' . $order_by_sql);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as $row) {
         $hex = sprintf('%x', $row['node_id']);
@@ -60,9 +60,10 @@ try {
             'longitude' => $row['longitude'] / 10000000.0,
             'last_updated' => $row['last_updated'], // Pass the raw timestamp
             'battery_level' => $row['battery_level'] ?? 0,
+            'battery_voltage' => $row['battery_voltage'] ?? 0.0, // --- MODIFIED: Added battery_voltage ---
             'temperature' => $row['temperature'] ?? 0.0,
             'freq' => $row['freq'] ?? 0,
-            'role' => $row['role'] ?? 0, // --- MODIFIED: Added role to the data array ---
+            'role' => $row['role'] ?? 0,
             'is_stale' => $is_stale
         ];
         $nodes[] = $node_data;
@@ -585,15 +586,20 @@ try {
             // Use pushState so the back button works as expected
             history.replaceState({ nodeId: node.node_id }, '', url.toString());
 			
-            // --- MODIFIED: Added Role to popup content ---
             const roleText = ROLE_MAP_LONG[node.role] || 'Unknown';
             let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}<br>Role: ${roleText}`;
             
             if (node.freq > 0) {
                 content += `<br>F: ${node.freq} MHz`;
             }
+            // --- MODIFIED: Add battery voltage to popup ---
             if (node.battery_level > 0) {
-                content += `<br>🔋 ${node.battery_level}%`;
+                let batteryText = `🔋 ${node.battery_level}%`;
+                const voltage = parseFloat(node.battery_voltage);
+                if (voltage > 1.0 && voltage < 30) {
+                    batteryText += ` (${voltage.toFixed(2)}V)`;
+                }
+                content += `<br>${batteryText}`;
             }
             const temp = parseFloat(node.temperature);
             if (temp !== 0) {
@@ -665,7 +671,6 @@ try {
                 nodeItem.dataset.nodeId = node.node_id; // For linking list item to node data
                 nodeItem.dataset.filterText = `${node.long_name} ${node.short_name} ${node.node_id_hex} ${node.freq}`.toLowerCase();
                 
-                // --- MODIFIED: Added Role to node list item stats ---
                 let statsHtml = '';
                 const roleShortText = ROLE_MAP_SHORT[node.role] || '??';
                 statsHtml += `<span>Role: ${roleShortText}</span>`;
@@ -673,8 +678,14 @@ try {
                 if (node.freq > 0) {
                      statsHtml += `<span>F: ${node.freq} MHz</span>`;
                 }
+                // --- MODIFIED: Add battery voltage to node list ---
                 if (node.battery_level > 0) {
-                    statsHtml += `<span>🔋 ${node.battery_level}%</span>`;
+                    let batteryText = `🔋 ${node.battery_level}%`;
+                    const voltage = parseFloat(node.battery_voltage);
+                    if (voltage > 1.0 && voltage < 30) {
+                        batteryText += ` (${voltage.toFixed(2)}V)`;
+                    }
+                    statsHtml += `<span>${batteryText}</span>`;
                 }
                 const temp = parseFloat(node.temperature);
                 if (temp !== 0) {

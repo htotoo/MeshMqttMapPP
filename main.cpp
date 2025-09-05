@@ -77,7 +77,7 @@ void m_on_telemetry_device(MC_Header& header, MC_Telemetry_Device& telemetry) {
     if (messageIdTracker.check(header.packet_id)) {
         return;
     }
-    nodeDb.setNodeBattery(header.srcnode, telemetry.battery_level);
+    nodeDb.setNodeBattery(header.srcnode, telemetry.battery_level, telemetry.voltage);
     printf("Telemetry Device from node 0x%08" PRIx32 ": Battery: %d, Uptime: %d, Voltage: %d, Channel Utilization: %d\n", header.srcnode, telemetry.battery_level, telemetry.uptime_seconds, telemetry.voltage, telemetry.channel_utilization);
 }
 void m_on_telemetry_environment(MC_Header& header, MC_Telemetry_Environment& telemetry) {

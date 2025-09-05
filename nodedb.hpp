@@ -110,7 +110,7 @@ class NodeDb {
         sqlite3_finalize(stmt);
     }
 
-    void setNodeBattery(uint32_t nodeId, int batteryLevel) {
+    void setNodeBattery(uint32_t nodeId, int batteryLevel, float voltage) {
         std::lock_guard<std::mutex> lock(mtx);
         if (!db) return;
         if (batteryLevel < 0 || batteryLevel > 101) {
@@ -118,10 +118,11 @@ class NodeDb {
         }
 
         sqlite3_stmt* stmt;
-        const char* sql = "UPDATE nodes SET battery_level = ?, last_updated = CURRENT_TIMESTAMP WHERE node_id = ?";
+        const char* sql = "UPDATE nodes SET battery_level = ?, battery_voltage = ?, last_updated = CURRENT_TIMESTAMP WHERE node_id = ?";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, batteryLevel);
-            sqlite3_bind_int(stmt, 2, nodeId);
+            sqlite3_bind_double(stmt, 2, voltage);
+            sqlite3_bind_int(stmt, 3, nodeId);
 
             if (sqlite3_step(stmt) != SQLITE_DONE) {
                 std::cerr << "Error updating node battery level: " << sqlite3_errmsg(db) << std::endl;
@@ -186,6 +187,7 @@ class NodeDb {
             "altitude INTEGER, "
             "temperature REAL, "
             "battery_level INTEGER, "
+            "battery_voltage REAL, "
             "freq INTEGER, "
             "role INTEGER, "
             "last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP);";
