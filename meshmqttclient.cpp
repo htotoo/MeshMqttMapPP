@@ -188,8 +188,8 @@ void MeshMqttClient::sendMeshtasticMsg(uint32_t src_node, std::string& text, std
     data.payload.size = text.length();
     memcpy(data.payload.bytes, text.c_str(), data.payload.size);
     data.want_response = false;
-    data.dest = 0;  // broadcast
-    data.source = 0;
+    data.dest = 0xffffffff;  // broadcast
+    data.source = src_node;
     data.request_id = 0;
     data.reply_id = 0;
     data.emoji = 0;
@@ -362,7 +362,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
             safe_printf("Service env decode failed\r\n");
             return -1;  // decoding failed
         }
-
+        safe_printf("msgId: %d\r\n", serviceEnv.packet->id);
         /* safe_printf("serviceEnv.channel_id: %s\r\n", serviceEnv.channel_id);
          safe_printf("serviceEnv.gateway_id: %s\r\n", serviceEnv.gateway_id);
 
