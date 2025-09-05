@@ -64,19 +64,20 @@ class NodeDb {
         sqlite3_finalize(stmt);
     }
 
-    void setNodeInfo(uint32_t nodeId, const std::string& shortName, const std::string& longName, uint16_t freq) {
+    void setNodeInfo(uint32_t nodeId, const std::string& shortName, const std::string& longName, uint16_t freq, uint8_t role) {
         std::lock_guard<std::mutex> lock(mtx);
         if (!db) return;
 
         sqlite3_stmt* stmt;
         const char* sql =
-            "INSERT INTO nodes (node_id, short_name, long_name, freq, last_updated) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) "
-            "ON CONFLICT(node_id) DO UPDATE SET short_name=excluded.short_name, long_name=excluded.long_name, freq=excluded.freq, last_updated=CURRENT_TIMESTAMP";
+            "INSERT INTO nodes (node_id, short_name, long_name, freq, role, last_updated) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(node_id) DO UPDATE SET short_name=excluded.short_name, long_name=excluded.long_name, freq=excluded.freq, role=excluded.role, last_updated=CURRENT_TIMESTAMP";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, nodeId);
             sqlite3_bind_text(stmt, 2, shortName.c_str(), -1, SQLITE_STATIC);
             sqlite3_bind_text(stmt, 3, longName.c_str(), -1, SQLITE_STATIC);
             sqlite3_bind_int(stmt, 4, freq);
+            sqlite3_bind_int(stmt, 5, role);
 
             if (sqlite3_step(stmt) != SQLITE_DONE) {
                 std::cerr << "Error inserting node info: " << sqlite3_errmsg(db) << std::endl;
@@ -186,6 +187,7 @@ class NodeDb {
             "temperature REAL, "
             "battery_level INTEGER, "
             "freq INTEGER, "
+            "role INTEGER, "
             "last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP);";
         const char* sql2 =
             "CREATE TABLE IF NOT EXISTS chat ("

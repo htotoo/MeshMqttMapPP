@@ -421,7 +421,11 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                 }
             } else if (decodedtmp.portnum == 71) {
                 printf("Received a NEIGHBORINFO_APP   packet");
-                // payload: Protobuf ?
+                meshtastic_NeighborInfo neighbor_info_msg = {};
+                if (pb_decode_from_bytes(decodedtmp.payload.bytes, decodedtmp.payload.size, &meshtastic_NeighborInfo_msg, &neighbor_info_msg)) {
+                } else {
+                    // printf("Failed to decode NeighborInfo");
+                }
             } else {
                 printf("Received an unhandled portnum: %d", decodedtmp.portnum);
             }
