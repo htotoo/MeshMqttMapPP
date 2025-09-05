@@ -146,7 +146,7 @@ try {
         }
         #snr-toggle-container {
             position: absolute;
-            top: 10px;
+            top: 100px;
             right: 10px;
             z-index: 1000;
             background-color: rgba(255, 255, 255, 0.8);
@@ -473,10 +473,35 @@ try {
 
         // --- MAP INITIALIZATION ---
         const map = L.map(mapElement).setView([47.4979, 19.0402], 7);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+
+        // Define tile layers
+        const standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        }).addTo(map);
+        });
+
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19,
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        });
+
+        const terrainLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        	maxZoom: 17,
+        	attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+        });
+        
+        // Create a base maps object
+        const baseMaps = {
+            "Standard": standardLayer,
+            "Satellite": satelliteLayer,
+            "Terrain": terrainLayer
+        };
+        
+        // Add the default layer to the map
+        standardLayer.addTo(map);
+        
+        // Add the layer control
+        L.control.layers(baseMaps).addTo(map);
 
         // --- DATA & UI ---
         const nodes = <?php echo json_encode($nodes); ?>;
