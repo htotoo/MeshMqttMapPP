@@ -72,6 +72,9 @@ class MeshMqttClient {
         onRaw = cb;
     }
 
+    void sendMeshtasticMsg(uint32_t src_node, std::string& text, std::string& rootTopic);
+    void sendMeshtasticNodeinfo(uint32_t src_node, std::string& shortname, std::string& longname, std::string& rootTopic);
+
     void addTopic(std::string topic) { topicList.push_back(topic); }
 
    private:

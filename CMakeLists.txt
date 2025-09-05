@@ -66,6 +66,7 @@ add_executable(meshlogger
     main.cpp
     telegram.cpp
     unishox2.cpp
+    CommandInterpreter.cpp
     ${MESHTASTIC_SOURCES}
     ${NANOPB_SOURCES}
 )

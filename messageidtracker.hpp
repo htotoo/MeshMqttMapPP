@@ -1,6 +1,8 @@
 #ifndef MESSAGEIDTRACKER_HPP
 #define MESSAGEIDTRACKER_HPP
 
+#define IDTRACK_LIMIT 300
+
 class MessageIdTracker {
    public:
     bool check(uint32_t msgid) {
@@ -8,7 +10,7 @@ class MessageIdTracker {
         if (msgids_.find(msgid) != msgids_.end()) {
             return true;
         }
-        if (msgids_.size() >= 50) {
+        if (msgids_.size() >= IDTRACK_LIMIT) {
             // Remove the oldest inserted msgid
             msgids_order_.pop_front();
             msgids_.erase(msgids_order_.front());
