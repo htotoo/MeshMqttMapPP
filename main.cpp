@@ -24,6 +24,7 @@
 #include "CommandInterpreter.hpp"
 
 MessageIdTracker messageIdTracker;
+MessageIdTracker messageIdTrackerTelemetry;
 NodeNameMap nodeNameMap;
 
 std::atomic<bool> running(true);
@@ -58,9 +59,33 @@ void cmd_send(const std::string& parameters) {
         // This is where you call your actual send function
         // localClient.sendTextMessage(message, nodeId);
         std::string rt = "msh/EU_868/HU";
-        localClient.sendMeshtasticMsg(nodeId, message, rt);
+        localClient.sendMeshtasticMsg(nodeId, message, rt, 7);
         rt = "msh/EU_433/HU";
-        localClient.sendMeshtasticMsg(nodeId, message, rt);
+        localClient.sendMeshtasticMsg(nodeId, message, rt, 7);
+    } catch (const std::exception& e) {
+        safe_printf("Invalid node ID. Please use hex format (e.g., aabbccdd).\n");
+    }
+}
+
+void cmd_sendlowhop(const std::string& parameters) {
+    size_t first_space = parameters.find(' ');
+    if (first_space == std::string::npos || first_space == parameters.length() - 1) {
+        safe_printf("Usage: send <node_id_hex> <message>\n");
+        return;
+    }
+
+    std::string nodeId_str = parameters.substr(0, first_space);
+    std::string message = parameters.substr(first_space + 1);
+
+    try {
+        uint32_t nodeId = std::stoul(nodeId_str, nullptr, 16);
+        safe_printf("Sending message '%s' to node 0x%08x via local client...\n", message.c_str(), nodeId);
+        // This is where you call your actual send function
+        // localClient.sendTextMessage(message, nodeId);
+        std::string rt = "msh/EU_868/HU";
+        localClient.sendMeshtasticMsg(nodeId, message, rt, 1);
+        rt = "msh/EU_433/HU";
+        localClient.sendMeshtasticMsg(nodeId, message, rt, 1);
     } catch (const std::exception& e) {
         safe_printf("Invalid node ID. Please use hex format (e.g., aabbccdd).\n");
     }
@@ -89,6 +114,10 @@ void m_on_message(MC_Header& header, MC_TextMessage& message) {
         return;
     }
     safe_printf("Message from node 0x%08" PRIx32 ": %s\n", header.srcnode, message.text.c_str());
+    if (message.text.find("seq ", 0) == 0) {
+        return;
+    }
+
     nodeDb.saveChatMessage(header.srcnode, message.chan, message.text, header.freq);
 
     std::string telegramMessage = std::to_string(message.chan) + "@" + std::to_string(header.freq) + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
@@ -97,7 +126,7 @@ void m_on_message(MC_Header& header, MC_TextMessage& message) {
 }
 
 void m_on_position_message(MC_Header& header, MC_Position& position, bool needReply) {
-    if (messageIdTracker.check(header.packet_id)) {
+    if (messageIdTrackerTelemetry.check(header.packet_id)) {
         return;
     }
     if (!position.has_latitude_i || !position.has_longitude_i) {
@@ -111,7 +140,7 @@ void m_on_position_message(MC_Header& header, MC_Position& position, bool needRe
 }
 
 void m_on_node_info(MC_Header& header, MC_NodeInfo& nodeinfo, bool needReply) {
-    if (messageIdTracker.check(header.packet_id)) {
+    if (messageIdTrackerTelemetry.check(header.packet_id)) {
         return;
     }
     safe_printf("Node Info from node 0x%08" PRIx32 ": ID: %s, Short Name: %s, Long Name: %s\n", header.srcnode, nodeinfo.id, nodeinfo.short_name, nodeinfo.long_name);
@@ -120,21 +149,21 @@ void m_on_node_info(MC_Header& header, MC_NodeInfo& nodeinfo, bool needReply) {
 }
 
 void m_on_waypoint_message(MC_Header& header, MC_Waypoint& waypoint) {
-    if (messageIdTracker.check(header.packet_id)) {
+    if (messageIdTrackerTelemetry.check(header.packet_id)) {
         return;
     }
     safe_printf("Waypoint from node 0x%08" PRIx32 ": Lat: %d, Lon: %d, Name: %s\n", header.srcnode, waypoint.latitude_i, waypoint.longitude_i, waypoint.name);
 }
 
 void m_on_telemetry_device(MC_Header& header, MC_Telemetry_Device& telemetry) {
-    if (messageIdTracker.check(header.packet_id)) {
+    if (messageIdTrackerTelemetry.check(header.packet_id)) {
         return;
     }
     nodeDb.setNodeBattery(header.srcnode, telemetry.battery_level, telemetry.voltage);
     safe_printf("Telemetry Device from node 0x%08" PRIx32 ": Battery: %d, Uptime: %d, Voltage: %d, Channel Utilization: %d\n", header.srcnode, telemetry.battery_level, telemetry.uptime_seconds, telemetry.voltage, telemetry.channel_utilization);
 }
 void m_on_telemetry_environment(MC_Header& header, MC_Telemetry_Environment& telemetry) {
-    if (messageIdTracker.check(header.packet_id)) {
+    if (messageIdTrackerTelemetry.check(header.packet_id)) {
         return;
     }
     safe_printf("Telemetry Environment from node 0x%08" PRIx32 ": Temperature: %d, Humidity: %d, Pressure: %d, Lux: %d\n", header.srcnode, telemetry.temperature, telemetry.humidity, telemetry.pressure, telemetry.lux);
@@ -185,6 +214,7 @@ int main(int argc, char* argv[]) {
     // Register the commands you want to support
     interpreter.subscribe("help", cmd_help);
     interpreter.subscribe("send", cmd_send);
+    interpreter.subscribe("sendlowhop", cmd_sendlowhop);
     interpreter.subscribe("nodeinfo", cmd_nodeinfo);
     interpreter.subscribe("exit", cmd_exit);
 
@@ -231,7 +261,7 @@ int main(int argc, char* argv[]) {
         }
         if ((timer % (3600 * 4)) == 0) {
             std::string rt = "msh/EU_868";
-            mainClient.sendMeshtasticMsg(0xabbababa, globalad, rt);
+            mainClient.sendMeshtasticMsg(0xabbababa, globalad, rt, 2);
         }
     }
 

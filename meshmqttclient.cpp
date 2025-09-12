@@ -176,7 +176,7 @@ int MeshMqttClient::messageArrived(void* context, char* topicName, int topicLen,
     return 1;
 }
 
-void MeshMqttClient::sendMeshtasticMsg(uint32_t src_node, std::string& text, std::string& rootTopic) {
+void MeshMqttClient::sendMeshtasticMsg(uint32_t src_node, std::string& text, std::string& rootTopic, uint8_t hoplimit) {
     if (text.length() > 230) {
         safe_printf("Text message too long, max 230 characters.\n");
         return;
@@ -224,8 +224,8 @@ void MeshMqttClient::sendMeshtasticMsg(uint32_t src_node, std::string& text, std
     packet.id = packetId;  // no ack, random packet id
     packet.rx_time = 0;
     packet.rx_snr = 0;
-    packet.hop_limit = 7;  // allow one hop
-    packet.hop_start = 7;
+    packet.hop_limit = hoplimit;  // allow one hop
+    packet.hop_start = hoplimit;
     packet.want_ack = false;
     packet.via_mqtt = false;
     packet.pki_encrypted = false;
@@ -246,7 +246,7 @@ void MeshMqttClient::sendMeshtasticMsg(uint32_t src_node, std::string& text, std
     snprintf(gateway_id_str, sizeof(gateway_id_str), "!%08x", src_node);
     serviceEnv.gateway_id = gateway_id_str;
     // encode the ServiceEnvelope to bytes
-    uint8_t encoded_envelope[MESHTASTIC_MESHTASTIC_MQTT_PB_H_MAX_SIZE] = {0};
+    uint8_t encoded_envelope[300] = {0};
     pb_ostream_t stream3 = pb_ostream_from_buffer(encoded_envelope, sizeof(encoded_envelope));
     if (!pb_encode(&stream3, &meshtastic_ServiceEnvelope_msg, &serviceEnv)) {
         safe_printf("Failed to encode meshtastic_ServiceEnvelope: %s\n", PB_GET_ERROR(&stream3));
