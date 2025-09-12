@@ -1,51 +1,43 @@
 <?php
 
-// --- NO CACHE HEADERS ---
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
 header("Cache-Control: post-check=0, pre-check=0", false);
 header("Pragma: no-cache");
 header("Expires: 0");
-// --- CONFIGURATION ---
+
 $db_path = '/home/totoo/projects/meshlogger/build/nodes.db';
 
-// --- DATABASE CONNECTION & DATA FETCHING ---
 $nodes = [];
 $snr_data = [];
 $chat_messages = [];
 $node_count = 0;
 
-// --- Handle Sorting ---
-$sort_by = $_GET['sort'] ?? 'last_updated'; // Default to last_updated
-$order_by_sql = 'ORDER BY last_updated DESC'; // Default SQL
+$sort_by = $_GET['sort'] ?? 'last_updated';
+$order_by_sql = 'ORDER BY last_updated DESC';
 if ($sort_by === 'name') {
     $order_by_sql = 'ORDER BY long_name ASC';
 }
 
 
 try {
-    // 1. Open the SQLite database
     $db = new PDO('sqlite:' . $db_path);
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    // Set a busy timeout of 5 seconds to handle concurrent access
     $db->setAttribute(PDO::ATTR_TIMEOUT, 5);
 
-    // 2. Fetch all nodes and create a lookup map, using the selected order
     $node_map = [];
-    // --- MODIFIED: Added 'role' and 'battery_voltage' to the SELECT query ---
-    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role, battery_voltage FROM nodes ' . $order_by_sql);
+    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role, battery_voltage, uptime FROM nodes ' . $order_by_sql);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as $row) {
         $hex = sprintf('%x', $row['node_id']);
         $short_hex = substr($hex, -8);
 
-        // Check if the node is stale (older than 1 day) using UTC time
         $is_stale = false;
         if (!empty($row['last_updated'])) {
             $utc = new DateTimeZone('UTC');
             $last_seen = new DateTime($row['last_updated'], $utc);
-            $now = new DateTime('now', $utc); // Get current time in UTC
+            $now = new DateTime('now', $utc);
             $diff_seconds = $now->getTimestamp() - $last_seen->getTimestamp();
-            if ($diff_seconds > 86400) { // 86400 seconds = 1 day
+            if ($diff_seconds > 86400) {
                 $is_stale = true;
             }
         }
@@ -58,39 +50,36 @@ try {
             'long_name' => htmlspecialchars($row['long_name'] ?? 'N/A', ENT_QUOTES, 'UTF-8'),
             'latitude' => $row['latitude'] / 10000000.0,
             'longitude' => $row['longitude'] / 10000000.0,
-            'last_updated' => $row['last_updated'], // Pass the raw timestamp
+            'last_updated' => $row['last_updated'],
             'battery_level' => $row['battery_level'] ?? 0,
-            'battery_voltage' => $row['battery_voltage'] ?? 0.0, // --- MODIFIED: Added battery_voltage ---
+            'battery_voltage' => $row['battery_voltage'] ?? 0.0,
             'temperature' => $row['temperature'] ?? 0.0,
             'freq' => $row['freq'] ?? 0,
             'role' => $row['role'] ?? 0,
+            'uptime' => $row['uptime'] ?? 0,
             'is_stale' => $is_stale
         ];
         $nodes[] = $node_data;
-        $node_map[$row['node_id']] = $node_data; // Create map for easy lookup
+        $node_map[$row['node_id']] = $node_data;
     }
     $node_count = count($nodes);
 
-    // 3. Fetch SNR data from the last 2 weeks, filtering out self-references and zero SNR values
     $snr_stmt = $db->query("SELECT node1, node2, snr FROM snr WHERE last_updated >= date('now', '-14 days') AND node1 != node2 AND snr != 0");
     $snr_data = $snr_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
-    // 4. Fetch chat messages from the last 5 days
     $chat_stmt = $db->query("SELECT node_id, message, timestamp, freq FROM chat WHERE timestamp >= date('now', '-5 days') ORDER BY timestamp DESC");
     $chat_rows = $chat_stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($chat_rows as $chat_row) {
         $sender_id = $chat_row['node_id'];
 		$freq = $chat_row['freq'];
         
-        $sender_display = '!' . substr(sprintf('%x', $sender_id), -8); // Default to hex
+        $sender_display = '!' . substr(sprintf('%x', $sender_id), -8);
         $has_coords = false;
 
         if (isset($node_map[$sender_id])) {
             $node_info = $node_map[$sender_id];
-            // Use short_name if it's meaningful, otherwise use the pre-calculated hex ID
             $sender_display = ($node_info['short_name'] !== 'N/A') ? $node_info['short_name'] : $node_info['node_id_hex'];
-            // Check for coordinates
             $has_coords = ($node_info['latitude'] != 0 || $node_info['longitude'] != 0);
         }
 
@@ -105,7 +94,6 @@ try {
     }
 
 } catch (PDOException $e) {
-    // If there's an error, we display it and stop.
     die("Database Error: " . $e->getMessage());
 }
 ?>
@@ -136,10 +124,10 @@ try {
         }
         #top-section {
             display: flex;
-            flex-grow: 1; /* Let this section grow to fill available space */
+            flex-grow: 1;
             transition: height 0.3s ease;
-            overflow: hidden; /* Prevent content from spilling out during transition */
-            position: relative; /* Needed for positioning the SNR toggle */
+            overflow: hidden;
+            position: relative;
         }
         #map {
             flex: 1;
@@ -255,7 +243,7 @@ try {
             margin-top: 5px;
             display: flex;
             align-items: center;
-            gap: 12px; /* Space between items */
+            gap: 12px;
         }
         .node-stats span {
             display: inline-flex;
@@ -275,7 +263,7 @@ try {
             transition: height 0.3s ease;
         }
         #bottom-panel.collapsed {
-            height: 40px; /* Height of the header */
+            height: 40px;
             overflow: hidden;
         }
         #chat-header {
@@ -297,7 +285,6 @@ try {
             flex-grow: 1;
         }
         .chat-message {
-            /* Spacing properties removed as requested */
         }
         .chat-timestamp {
             font-size: 0.8em;
@@ -339,17 +326,15 @@ try {
             border: none;
         }
 
-        /* --- Custom Popup Styling --- */
         .leaflet-popup-content-wrapper .leaflet-popup-content {
-            max-height: 250px; /* Set a max height for the popup content */
-            overflow-y: auto;   /* Add a vertical scrollbar if content overflows */
-            padding-right: 5px; /* Add some space for the scrollbar */
+            max-height: 250px;
+            overflow-y: auto;
+            padding-right: 5px;
         }
 
-        /* --- MOBILE RESPONSIVENESS --- */
         @media (max-width: 768px) {
             #node-list-panel {
-                width: 260px; /* Narrower panel for mobile */
+                width: 260px;
                 min-width: 260px;
             }
 
@@ -359,7 +344,7 @@ try {
             }
 
             #panel-header {
-                font-size: 1.1em; /* Slightly smaller header font */
+                font-size: 1.1em;
             }
         }
     </style>
@@ -458,7 +443,25 @@ try {
             return `${diffDays} days`;
         }
 
-        // --- DOM ELEMENTS ---
+        function formatUptime(totalSeconds) {
+            if (!totalSeconds || totalSeconds <= 0) return null;
+
+            const days = Math.floor(totalSeconds / 86400);
+            const hours = Math.floor((totalSeconds % 86400) / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            
+            if (days > 0) {
+                return `${days}d ${hours}h`;
+            }
+            if (hours > 0) {
+                return `${hours}h ${minutes}m`;
+            }
+            if (minutes > 0) {
+                return `${minutes}m`;
+            }
+            return `${Math.floor(totalSeconds)}s`;
+        }
+
         const mapElement = document.getElementById('map');
         const nodeListPanel = document.getElementById('node-list-panel');
         const panelToggleBtn = document.getElementById('panel-toggle-btn');
@@ -473,10 +476,8 @@ try {
         const freq433Toggle = document.getElementById('freq-433-toggle');
         const freq868Toggle = document.getElementById('freq-868-toggle');
 
-        // --- MAP INITIALIZATION ---
         const map = L.map(mapElement).setView([47.4979, 19.0402], 7);
 
-        // Define tile layers
         const standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -492,26 +493,21 @@ try {
         	attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
         });
         
-        // Create a base maps object
         const baseMaps = {
             "Standard": standardLayer,
             "Satellite": satelliteLayer,
             "Terrain": terrainLayer
         };
         
-        // Add the default layer to the map
         standardLayer.addTo(map);
         
-        // Add the layer control
         L.control.layers(baseMaps).addTo(map);
 
-        // --- DATA & UI ---
         const nodes = <?php echo json_encode($nodes); ?>;
         const snrData = <?php echo json_encode($snr_data); ?>;
         const markerLayer = {};
-        const individualMarkerLayer = {}; // Lookup for non-clustered markers
+        const individualMarkerLayer = {};
 
-        // --- MODIFIED: Added Role Mappings ---
         const ROLE_MAP_LONG = {
             0: 'Client', 1: 'Client Mute', 2: 'Router', 3: 'Router Client',
             4: 'Repeater', 5: 'Tracker', 6: 'Sensor', 7: 'TAK',
@@ -522,7 +518,6 @@ try {
             6: 'SN', 7: 'TAK', 8: 'CH', 9: 'LF', 10: 'TT', 11: 'RL'
         };
         
-        // --- CUSTOM MARKER ICONS ---
         const redIcon = new L.Icon({
             iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
             shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
@@ -542,7 +537,6 @@ try {
         });
 
 
-        // Create a MarkerClusterGroup with options
         const activeMarkersCluster = L.markerClusterGroup({
             spiderfyOnMaxZoom: true,
             showCoverageOnHover: false,
@@ -558,14 +552,11 @@ try {
             disableClusteringAtZoom: 20
         });
         
-        // Layer for individual markers when clustering is off
         const activeIndividualMarkersLayer = L.layerGroup();
         const staleIndividualMarkersLayer = L.layerGroup();
-        // Layer for SNR lines
         const snrLayer = L.layerGroup();
 
 
-        // --- PANEL TOGGLE LOGIC ---
         panelToggleBtn.parentElement.addEventListener('click', () => {
             const isCollapsed = nodeListPanel.classList.toggle('collapsed');
             panelToggleBtn.innerHTML = isCollapsed ? '&raquo;' : '&laquo;';
@@ -578,21 +569,24 @@ try {
             setTimeout(() => map.invalidateSize(), 300);
         });
 
-        // --- Function to generate popup content dynamically ---
         function generatePopupContent(node) {
-			 // Update URL to include the node ID for sharing
             const url = new URL(window.location);
             url.searchParams.set('node', node.node_id);
-            // Use pushState so the back button works as expected
             history.replaceState({ nodeId: node.node_id }, '', url.toString());
 			
             const roleText = ROLE_MAP_LONG[node.role] || 'Unknown';
-            let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}<br>Role: ${roleText}`;
+            let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}`;
+            
+            const uptimeText = formatUptime(node.uptime);
+            if (uptimeText) {
+                content += `<br>Uptime: ${uptimeText}`;
+            }
+
+            content += `<br>Role: ${roleText}`;
             
             if (node.freq > 0) {
                 content += `<br>F: ${node.freq} MHz`;
             }
-            // --- MODIFIED: Add battery voltage to popup ---
             if (node.battery_level > 0) {
                 let batteryText = `🔋 ${node.battery_level}%`;
                 const voltage = parseFloat(node.battery_voltage);
@@ -612,14 +606,12 @@ try {
                 const snrFrom = [];
 
                 snrData.forEach(link => {
-                    // SNR to this node
                     if (link.node2 === node.node_id) {
                         const sourceNode = nodesById[link.node1];
                         if (sourceNode) {
                             snrTo.push(`<a href="#" onclick="openNodePopup(${sourceNode.node_id}); return false;">${sourceNode.short_name}</a> (${sourceNode.node_id_hex}): ${link.snr} dB`);
                         }
                     }
-                    // SNR from this node
                     if (link.node1 === node.node_id) {
                         const destNode = nodesById[link.node2];
                         if (destNode) {
@@ -638,7 +630,6 @@ try {
             return content;
         }
 
-        // --- Create Map Markers ---
         nodes.forEach(node => {
             if (node.latitude !== 0 || node.longitude !== 0) {
                 const iconToUse = node.is_stale ? redIcon : blueIcon;
@@ -650,15 +641,12 @@ try {
                 markerLayer[node.node_id] = marker;
                 
                 const individualMarker = L.marker([node.latitude, node.longitude], { icon: iconToUse });
-                individualMarker.node_id = node.node_id; // Add unique ID to marker
+                individualMarker.node_id = node.node_id;
                 individualMarker.bindPopup(popupFunction);
-                individualMarkerLayer[node.node_id] = individualMarker; // Add to new lookup
-
-                // Markers are added to layers dynamically by updateMapView()
+                individualMarkerLayer[node.node_id] = individualMarker;
             }
         });
         
-        // --- Populate Node List Panel ---
         if (nodes.length > 0) {
             nodes.forEach(node => {
                 const nodeItem = document.createElement('div');
@@ -668,17 +656,22 @@ try {
                     nodeItem.classList.add('stale-node');
                 }
                 
-                nodeItem.dataset.nodeId = node.node_id; // For linking list item to node data
+                nodeItem.dataset.nodeId = node.node_id;
                 nodeItem.dataset.filterText = `${node.long_name} ${node.short_name} ${node.node_id_hex} ${node.freq}`.toLowerCase();
                 
                 let statsHtml = '';
                 const roleShortText = ROLE_MAP_SHORT[node.role] || '??';
                 statsHtml += `<span>Role: ${roleShortText}</span>`;
+                
+                let uptimeHtml = '';
+                const uptimeText = formatUptime(node.uptime);
+                if (uptimeText) {
+                    uptimeHtml = `<small>Uptime: ${uptimeText}</small>`;
+                }
 
                 if (node.freq > 0) {
                      statsHtml += `<span>F: ${node.freq} MHz</span>`;
                 }
-                // --- MODIFIED: Add battery voltage to node list ---
                 if (node.battery_level > 0) {
                     let batteryText = `🔋 ${node.battery_level}%`;
                     const voltage = parseFloat(node.battery_voltage);
@@ -697,6 +690,7 @@ try {
                         <b>${node.long_name}</b> 
                         (${node.short_name} <span class="node-id-hex">${node.node_id_hex}</span>)
                         <small>Last Seen: ${timeAgo(node.last_updated)}</small>
+                        ${uptimeHtml}
                     </div>
                     ${statsHtml ? `<div class="node-stats">${statsHtml}</div>` : ''}
                 `;
@@ -709,7 +703,6 @@ try {
                 nodeListElement.appendChild(nodeItem);
             });
             
-            // Fit map bounds initially based on ALL markers, before any filtering
             if (Object.keys(markerLayer).length > 0) {
                  const allMarkersGroup = L.featureGroup(Object.values(markerLayer));
                  map.fitBounds(allMarkersGroup.getBounds().pad(0.2));
@@ -719,7 +712,6 @@ try {
             nodeListElement.innerHTML = '<div style="padding: 15px; text-align: center; color: #6c757d;">No nodes found.</div>';
         }
 
-        // --- NODE LIST FILTER & VISIBILITY LOGIC ---
         function updateNodeListVisibility() {
             const filterValue = nodeFilterInput.value.toLowerCase();
             const hideStale = hideStaleToggle.checked;
@@ -743,7 +735,7 @@ try {
                     if (node && (node.latitude !== 0 || node.longitude !== 0)) {
                         isVisibleOnMap = mapBounds.contains([node.latitude, node.longitude]);
                     } else {
-                        isVisibleOnMap = false; // Nodes without coords are not on the map
+                        isVisibleOnMap = false;
                     }
                 }
 
@@ -756,25 +748,21 @@ try {
         }
         nodeFilterInput.addEventListener('keyup', updateNodeListVisibility);
         filterByMapViewToggle.addEventListener('change', updateNodeListVisibility);
-        map.on('moveend', updateNodeListVisibility); // Update list when map moves
+        map.on('moveend', updateNodeListVisibility);
 
 
-        // --- EVENT HANDLERS ---
         function handleChatLinkClick(event, nodeId) {
             event.preventDefault();
             openNodePopup(nodeId);
         }
         
-        // --- POPUP STATE MANAGEMENT ---
         let isPopupOpen = false;
         map.on('popupopen', () => { isPopupOpen = true; });
 
-        // --- NEW --- Event listener to clear URL when popup closes
         map.on('popupclose', () => {
             isPopupOpen = false;
         });
         
-        // --- Unified function to open a specific node's popup ---
         function openNodePopup(nodeId) {
             const node = nodes.find(n => n.node_id == nodeId);
             if (!node || (node.latitude === 0 && node.longitude === 0)) return;
@@ -808,7 +796,6 @@ try {
         }
 
 
-        // --- SNR TOGGLE LOGIC ---
         function getSnrColor(snr) {
             const clampedSnr = Math.max(-20, Math.min(snr, 0));
             const percentage = (clampedSnr + 20) / 20;
@@ -837,11 +824,10 @@ try {
 
                 if (!node1 || !node2 || (node1.latitude === 0 && node1.longitude === 0) || (node2.latitude === 0 && node2.longitude === 0)) return;
 
-                // Check if both nodes are visible based on filters
                 const node1Visible = !((!show433 && node1.freq == 433) || (!show868 && node1.freq == 868)) && (!hideStale || !node1.is_stale);
                 const node2Visible = !((!show433 && node2.freq == 433) || (!show868 && node2.freq == 868)) && (!hideStale || !node2.is_stale);
                 
-                if (!node1Visible || !node2Visible) return; // Skip if either node is filtered out
+                if (!node1Visible || !node2Visible) return;
 
                 const pos1 = L.latLng(node1.latitude, node1.longitude);
                 const pos2 = L.latLng(node2.latitude, node2.longitude);
@@ -895,13 +881,11 @@ try {
             const show433 = freq433Toggle.checked;
             const show868 = freq868Toggle.checked;
 
-            // --- Remove layers from map and clear their contents ---
             [activeMarkersCluster, staleMarkersCluster, activeIndividualMarkersLayer, staleIndividualMarkersLayer, snrLayer].forEach(layer => {
                 if (map.hasLayer(layer)) map.removeLayer(layer);
                 layer.clearLayers();
             });
 
-            // --- Repopulate marker layers based on current filters ---
             nodes.forEach(node => {
                 const matchesFreq = !( (!show433 && node.freq == 433) || (!show868 && node.freq == 868) );
                 const matchesStale = !hideStale || !node.is_stale;
@@ -921,7 +905,6 @@ try {
                 }
             });
 
-            // --- Add the correct layers back to the map ---
             if (showSnr) {
                 map.addLayer(activeIndividualMarkersLayer);
                 map.addLayer(staleIndividualMarkersLayer);
@@ -933,7 +916,6 @@ try {
             }
         }
 
-        // --- Add Event Listeners for new toggles ---
         function onFilterChange() {
             updateMapView();
             updateNodeListVisibility();
@@ -944,23 +926,19 @@ try {
         freq433Toggle.addEventListener('change', onFilterChange);
         freq868Toggle.addEventListener('change', onFilterChange);
 
-        // Redraw lines on zoom to adjust curves
         map.on('zoomend', function() {
             if (snrToggle.checked) {
                 drawSnrLines();
             }
         });
         
-        // --- Initial Calls ---
         map.whenReady(() => {
             updateMapView();
             updateNodeListVisibility();
             
-            //  Check URL for a node ID on page load
             const urlParams = new URLSearchParams(window.location.search);
             const nodeIdFromUrl = urlParams.get('node');
             if (nodeIdFromUrl) {
-                // Use a small timeout to ensure map animations/loading are complete
                 setTimeout(() => {
                     const nodeIdNum = parseInt(nodeIdFromUrl, 10);
                     if (!isNaN(nodeIdNum)) {

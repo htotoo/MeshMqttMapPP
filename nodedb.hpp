@@ -70,8 +70,8 @@ class NodeDb {
 
         sqlite3_stmt* stmt;
         const char* sql =
-            "INSERT INTO nodes (node_id, short_name, long_name, freq, role, last_updated) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
-            "ON CONFLICT(node_id) DO UPDATE SET short_name=excluded.short_name, long_name=excluded.long_name, freq=excluded.freq, role=excluded.role, last_updated=CURRENT_TIMESTAMP";
+            "INSERT INTO nodes (node_id, short_name, long_name, freq, role,  last_updated) VALUES (?, ?, ?, ?, ?,  CURRENT_TIMESTAMP) "
+            "ON CONFLICT(node_id) DO UPDATE SET short_name=excluded.short_name, long_name=excluded.long_name, freq=excluded.freq, role=excluded.role, uptime=excluded.uptime, last_updated=CURRENT_TIMESTAMP";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, nodeId);
             sqlite3_bind_text(stmt, 2, shortName.c_str(), -1, SQLITE_STATIC);
@@ -110,7 +110,7 @@ class NodeDb {
         sqlite3_finalize(stmt);
     }
 
-    void setNodeBattery(uint32_t nodeId, int batteryLevel, float voltage) {
+    void setNodeTelemetryDevice(uint32_t nodeId, int batteryLevel, float voltage, uint32_t uptime) {
         std::lock_guard<std::mutex> lock(mtx);
         if (!db) return;
         if (batteryLevel < 0 || batteryLevel > 101) {
@@ -118,11 +118,12 @@ class NodeDb {
         }
 
         sqlite3_stmt* stmt;
-        const char* sql = "UPDATE nodes SET battery_level = ?, battery_voltage = ?, last_updated = CURRENT_TIMESTAMP WHERE node_id = ?";
+        const char* sql = "UPDATE nodes SET battery_level = ?, battery_voltage = ?, uptime = ?, last_updated = CURRENT_TIMESTAMP WHERE node_id = ?";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, batteryLevel);
             sqlite3_bind_double(stmt, 2, voltage);
-            sqlite3_bind_int(stmt, 3, nodeId);
+            sqlite3_bind_int(stmt, 3, uptime);
+            sqlite3_bind_int(stmt, 4, nodeId);
 
             if (sqlite3_step(stmt) != SQLITE_DONE) {
                 std::cerr << "Error updating node battery level: " << sqlite3_errmsg(db) << std::endl;
@@ -190,6 +191,7 @@ class NodeDb {
             "battery_voltage REAL, "
             "freq INTEGER, "
             "role INTEGER, "
+            "uptime INTEGER, "
             "last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP);";
         const char* sql2 =
             "CREATE TABLE IF NOT EXISTS chat ("
