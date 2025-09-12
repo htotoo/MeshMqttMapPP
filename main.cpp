@@ -39,11 +39,13 @@ void cmd_help(const std::string& parameters) {
     safe_printf("Available commands:\n");
     safe_printf("  help                         - Shows this help message\n");
     safe_printf("  send <node_id_hex> <message> - Sends a text message\n");
+    safe_printf("  send4 <node_id_hex> <message> - Sends a text message\n");
+    safe_printf("  send8 <node_id_hex> <message> - Sends a text message\n");
     safe_printf("  nodeinfo                     - Send my nodeinfo\n");
     safe_printf("  exit                         - Exits the application\n");
 }
 
-void cmd_send(const std::string& parameters) {
+void cmd_send_int(const std::string& parameters, int freq = 0) {
     size_t first_space = parameters.find(' ');
     if (first_space == std::string::npos || first_space == parameters.length() - 1) {
         safe_printf("Usage: send <node_id_hex> <message>\n");
@@ -59,12 +61,24 @@ void cmd_send(const std::string& parameters) {
         // This is where you call your actual send function
         // localClient.sendTextMessage(message, nodeId);
         std::string rt = "msh/EU_868/HU";
-        localClient.sendMeshtasticMsg(nodeId, message, rt, 7);
+        if (freq == 868 || freq == 0) localClient.sendMeshtasticMsg(nodeId, message, rt, 7);
         rt = "msh/EU_433/HU";
-        localClient.sendMeshtasticMsg(nodeId, message, rt, 7);
+        if (freq == 433 || freq == 0) localClient.sendMeshtasticMsg(nodeId, message, rt, 7);
     } catch (const std::exception& e) {
         safe_printf("Invalid node ID. Please use hex format (e.g., aabbccdd).\n");
     }
+}
+
+void cmd_send(const std::string& parameters) {
+    cmd_send_int(parameters, 0);
+}
+
+void cmd_send4(const std::string& parameters) {
+    cmd_send_int(parameters, 433);
+}
+
+void cmd_send8(const std::string& parameters) {
+    cmd_send_int(parameters, 868);
 }
 
 void cmd_sendlowhop(const std::string& parameters) {
@@ -115,7 +129,7 @@ void m_on_message(MC_Header& header, MC_TextMessage& message) {
     }
     safe_printf("Message from node 0x%08" PRIx32 ": %s\n", header.srcnode, message.text.c_str());
     if (message.text.find("seq ", 0) == 0) {
-        return;
+        // return;
     }
 
     nodeDb.saveChatMessage(header.srcnode, message.chan, message.text, header.freq);
@@ -214,6 +228,8 @@ int main(int argc, char* argv[]) {
     // Register the commands you want to support
     interpreter.subscribe("help", cmd_help);
     interpreter.subscribe("send", cmd_send);
+    interpreter.subscribe("send4", cmd_send4);
+    interpreter.subscribe("send8", cmd_send8);
     interpreter.subscribe("sendlowhop", cmd_sendlowhop);
     interpreter.subscribe("nodeinfo", cmd_nodeinfo);
     interpreter.subscribe("exit", cmd_exit);
