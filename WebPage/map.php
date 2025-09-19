@@ -536,24 +536,17 @@ try {
             shadowSize: [41, 41]
         });
 
-
-        const activeMarkersCluster = L.markerClusterGroup({
+       
+        const allMarkersCluster = L.markerClusterGroup({
             spiderfyOnMaxZoom: true,
             showCoverageOnHover: false,
             zoomToBoundsOnClick: true,
             maxClusterRadius: 40,
             disableClusteringAtZoom: 20
         });
-        const staleMarkersCluster = L.markerClusterGroup({
-            spiderfyOnMaxZoom: true,
-            showCoverageOnHover: false,
-            zoomToBoundsOnClick: true,
-            maxClusterRadius: 40,
-            disableClusteringAtZoom: 20
-        });
+        const allIndividualMarkersLayer = L.layerGroup();
         
-        const activeIndividualMarkersLayer = L.layerGroup();
-        const staleIndividualMarkersLayer = L.layerGroup();
+        
         const snrLayer = L.layerGroup();
 
 
@@ -780,8 +773,7 @@ try {
                          map.once('moveend', () => individualMarker.openPopup());
                      }
                 } else {
-                    const targetCluster = node.is_stale ? staleMarkersCluster : activeMarkersCluster;
-                    targetCluster.zoomToShowLayer(marker, () => {
+                   allMarkersCluster.zoomToShowLayer(marker, () => {
                         marker.openPopup();
                     });
                 }
@@ -874,18 +866,18 @@ try {
                 }
             });
         }
-
+        
         function updateMapView() {
             const showSnr = snrToggle.checked;
             const hideStale = hideStaleToggle.checked;
             const show433 = freq433Toggle.checked;
             const show868 = freq868Toggle.checked;
-
-            [activeMarkersCluster, staleMarkersCluster, activeIndividualMarkersLayer, staleIndividualMarkersLayer, snrLayer].forEach(layer => {
+            [allMarkersCluster, allIndividualMarkersLayer, snrLayer].forEach(layer => {
                 if (map.hasLayer(layer)) map.removeLayer(layer);
                 layer.clearLayers();
             });
 
+            
             nodes.forEach(node => {
                 const matchesFreq = !( (!show433 && node.freq == 433) || (!show868 && node.freq == 868) );
                 const matchesStale = !hideStale || !node.is_stale;
@@ -894,27 +886,23 @@ try {
                     const marker = markerLayer[node.node_id];
                     const individualMarker = individualMarkerLayer[node.node_id];
                     if (marker && individualMarker) {
-                        if (node.is_stale) {
-                            staleMarkersCluster.addLayer(marker);
-                            staleIndividualMarkersLayer.addLayer(individualMarker);
-                        } else {
-                            activeMarkersCluster.addLayer(marker);
-                            activeIndividualMarkersLayer.addLayer(individualMarker);
-                        }
+                        allMarkersCluster.addLayer(marker);
+                        allIndividualMarkersLayer.addLayer(individualMarker);
                     }
                 }
             });
 
+            // Add the appropriate layers back to the map
             if (showSnr) {
-                map.addLayer(activeIndividualMarkersLayer);
-                map.addLayer(staleIndividualMarkersLayer);
+                map.addLayer(allIndividualMarkersLayer);
                 drawSnrLines();
                 map.addLayer(snrLayer);
             } else {
-                map.addLayer(activeMarkersCluster);
-                map.addLayer(staleMarkersCluster);
+                map.addLayer(allMarkersCluster);
             }
         }
+        // --- MODIFICATION END ---
+
 
         function onFilterChange() {
             updateMapView();
