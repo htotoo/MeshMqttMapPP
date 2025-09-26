@@ -36,28 +36,40 @@ void MeshMqttClient::loop() {
     int rc;
     if (!client) return;
     if (!MQTTClient_isConnected(client)) {
+        if (client) {
+            MQTTClient_destroy(&client);
+            client = nullptr; // Avoid dangling pointer
+        }
         safe_printf("Try to connect...\n");
+    if ((rc = MQTTClient_create(&client, address.c_str(), CLIENTID, MQTTCLIENT_PERSISTENCE_NONE, NULL)) != MQTTCLIENT_SUCCESS) {
+        safe_printf("Failed to connect. Reason: %d\n", rc);
+        return ;
+    }
 
-        // Ha a csatlakozás nem sikerül, várunk és újrapróbáljuk
-        if (MQTTClient_connect(client, &conn_opts) != MQTTCLIENT_SUCCESS) {
-            fprintf(stderr, "Connection failed. Retry in %d seconds.\n", RECONNECT_DELAY);
-            sleep(RECONNECT_DELAY);
-            return;  // Vissza a ciklus elejére
+    if ((rc = MQTTClient_setCallbacks(client, (void*)this, connectionLost, messageArrived, NULL) != MQTTCLIENT_SUCCESS)) {
+        safe_printf("Failed to set callbacks. Reason: %d\n", rc);
+        return ;
+    }
+    // Ha a csatlakozás nem sikerül, várunk és újrapróbáljuk
+    if (MQTTClient_connect(client, &conn_opts) != MQTTCLIENT_SUCCESS) {
+        fprintf(stderr, "Connection failed. Retry in %d seconds.\n", RECONNECT_DELAY);
+        sleep(RECONNECT_DELAY);
+        return;  // Vissza a ciklus elejére
+    }
+
+    safe_printf("MQTT connect ok! %s\n", address.c_str());
+
+    // Sikeres csatlakozás után újra fel kell iratkozni a témakörökre!
+    printf("Subscribe to topics...\n");
+    for (int i = 0; i < topicList.size(); i++) {
+        if ((rc = MQTTClient_subscribe(client, topicList[i].c_str(), 1)) != MQTTCLIENT_SUCCESS) {
+            fprintf(stderr, "Failed to resubscribe, error code: %d\n", rc);
+            // Nem lépünk ki, a ciklus újrapróbálja a kapcsolatot bontani és újrakötni
+            MQTTClient_disconnect(client, TIMEOUT);
+        } else {
+            safe_printf("Successful resubscription.\n\n");
         }
-
-        safe_printf("MQTT connect ok! %s\n", address.c_str());
-
-        // Sikeres csatlakozás után újra fel kell iratkozni a témakörökre!
-        printf("Subscribe to topics...\n");
-        for (int i = 0; i < topicList.size(); i++) {
-            if ((rc = MQTTClient_subscribe(client, topicList[i].c_str(), 1)) != MQTTCLIENT_SUCCESS) {
-                fprintf(stderr, "Failed to resubscribe, error code: %d\n", rc);
-                // Nem lépünk ki, a ciklus újrapróbálja a kapcsolatot bontani és újrakötni
-                MQTTClient_disconnect(client, TIMEOUT);
-            } else {
-                safe_printf("Successful resubscription.\n\n");
-            }
-        }
+    }
     }
 }
 
@@ -65,7 +77,7 @@ bool MeshMqttClient::aes_decrypt_meshtastic_payload(const uint8_t* key, uint16_t
     int ret = mbedtls_aes_setkey_enc(&aes_ctx, key, keySize);
     if (ret != 0) {
         safe_printf("mbedtls_aes_setkey_enc failed with error: -0x%04x", -ret);
-        mbedtls_aes_free(&aes_ctx);
+        //mbedtls_aes_free(&aes_ctx);
         return false;
     }
     uint8_t nonce[16];
@@ -77,7 +89,7 @@ bool MeshMqttClient::aes_decrypt_meshtastic_payload(const uint8_t* key, uint16_t
     ret = mbedtls_aes_crypt_ctr(&aes_ctx, len, &nc_off, nonce, stream_block, encrypted_in, decrypted_out);
     if (ret != 0) {
         safe_printf("mbedtls_aes_crypt_ctr failed with error: -0x%04x", -ret);
-        mbedtls_aes_free(&aes_ctx);
+        //mbedtls_aes_free(&aes_ctx);
         return false;
     }
     return true;

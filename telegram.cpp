@@ -52,5 +52,6 @@ void TelegramPoster::loop() {
 
 void TelegramPoster::queueMessage(const std::string& message) {
     std::lock_guard<std::mutex> lock(mtx);
+    if (messageQueue.size() >= 100)  return;
     messageQueue.push(message);
 }

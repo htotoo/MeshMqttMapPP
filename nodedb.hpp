@@ -219,14 +219,17 @@ class NodeDb {
             if (sqlite3_exec(db, sql2, nullptr, nullptr, &errMsg) != SQLITE_OK) {
                 std::cerr << "SQL error: " << errMsg << std::endl;
                 sqlite3_free(errMsg);
+                errMsg = nullptr;
             }
             if (sqlite3_exec(db, sql3, nullptr, nullptr, &errMsg) != SQLITE_OK) {
                 std::cerr << "SQL error: " << errMsg << std::endl;
                 sqlite3_free(errMsg);
+                errMsg = nullptr;
             }
             if (sqlite3_exec(db, sql4, nullptr, nullptr, &errMsg) != SQLITE_OK) {
                 std::cerr << "SQL error: " << errMsg << std::endl;
                 sqlite3_free(errMsg);
+                errMsg = nullptr;
             }
         }
     }

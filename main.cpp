@@ -21,7 +21,11 @@
 
 #include "config.hpp"
 
+#define USECONSOLE 1
+
+#ifdef USECONSOLE
 #include "CommandInterpreter.hpp"
+#endif
 
 MessageIdTracker messageIdTracker;
 MessageIdTracker messageIdTrackerTelemetry;
@@ -34,6 +38,8 @@ MeshMqttClient mainClient;
 NodeDb nodeDb("nodes.db");
 TelegramPoster telegramPoster;
 
+
+#ifdef USECONSOLE
 // --- Command Callback Functions ---
 void cmd_help(const std::string& parameters) {
     safe_printf("Available commands:\n");
@@ -122,6 +128,8 @@ void cmd_exit(const std::string& parameters) {
     safe_printf("Exiting...\n");
     running = false;  // This will cause the main loop to terminate
 }
+
+#endif
 
 void m_on_message(MC_Header& header, MC_TextMessage& message) {
     if (messageIdTracker.check(header.packet_id)) {
@@ -223,6 +231,7 @@ void handle_signal(int signal) {
 int main(int argc, char* argv[]) {
     signal(SIGINT, handle_signal);
 
+    #ifdef USECONSOLE
     CommandInterpreter interpreter;
 
     // Register the commands you want to support
@@ -236,7 +245,7 @@ int main(int argc, char* argv[]) {
 
     // Start listening for input in the background
     interpreter.start();
-
+    #endif
     telegramPoster.setApiToken(TELEGRAM_TOKEN);
     telegramPoster.setChatId(TELEGRAM_CHAT_ID);
     safe_printf("Loading node names from database...\n");
@@ -282,7 +291,8 @@ int main(int argc, char* argv[]) {
     }
 
     // Cleanly stop the command interpreter thread
+    #ifdef USECONSOLE
     interpreter.stop();
-
+    #endif
     return 0;
 }
