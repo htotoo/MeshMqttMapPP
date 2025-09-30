@@ -38,38 +38,38 @@ void MeshMqttClient::loop() {
     if (!MQTTClient_isConnected(client)) {
         if (client) {
             MQTTClient_destroy(&client);
-            client = nullptr; // Avoid dangling pointer
+            client = nullptr;  // Avoid dangling pointer
         }
         safe_printf("Try to connect...\n");
-    if ((rc = MQTTClient_create(&client, address.c_str(), CLIENTID, MQTTCLIENT_PERSISTENCE_NONE, NULL)) != MQTTCLIENT_SUCCESS) {
-        safe_printf("Failed to connect. Reason: %d\n", rc);
-        return ;
-    }
-
-    if ((rc = MQTTClient_setCallbacks(client, (void*)this, connectionLost, messageArrived, NULL) != MQTTCLIENT_SUCCESS)) {
-        safe_printf("Failed to set callbacks. Reason: %d\n", rc);
-        return ;
-    }
-    // Ha a csatlakozás nem sikerül, várunk és újrapróbáljuk
-    if (MQTTClient_connect(client, &conn_opts) != MQTTCLIENT_SUCCESS) {
-        fprintf(stderr, "Connection failed. Retry in %d seconds.\n", RECONNECT_DELAY);
-        sleep(RECONNECT_DELAY);
-        return;  // Vissza a ciklus elejére
-    }
-
-    safe_printf("MQTT connect ok! %s\n", address.c_str());
-
-    // Sikeres csatlakozás után újra fel kell iratkozni a témakörökre!
-    printf("Subscribe to topics...\n");
-    for (int i = 0; i < topicList.size(); i++) {
-        if ((rc = MQTTClient_subscribe(client, topicList[i].c_str(), 1)) != MQTTCLIENT_SUCCESS) {
-            fprintf(stderr, "Failed to resubscribe, error code: %d\n", rc);
-            // Nem lépünk ki, a ciklus újrapróbálja a kapcsolatot bontani és újrakötni
-            MQTTClient_disconnect(client, TIMEOUT);
-        } else {
-            safe_printf("Successful resubscription.\n\n");
+        if ((rc = MQTTClient_create(&client, address.c_str(), CLIENTID, MQTTCLIENT_PERSISTENCE_NONE, NULL)) != MQTTCLIENT_SUCCESS) {
+            safe_printf("Failed to connect. Reason: %d\n", rc);
+            return;
         }
-    }
+
+        if ((rc = MQTTClient_setCallbacks(client, (void*)this, connectionLost, messageArrived, NULL) != MQTTCLIENT_SUCCESS)) {
+            safe_printf("Failed to set callbacks. Reason: %d\n", rc);
+            return;
+        }
+        // Ha a csatlakozás nem sikerül, várunk és újrapróbáljuk
+        if (MQTTClient_connect(client, &conn_opts) != MQTTCLIENT_SUCCESS) {
+            fprintf(stderr, "Connection failed. Retry in %d seconds.\n", RECONNECT_DELAY);
+            sleep(RECONNECT_DELAY);
+            return;  // Vissza a ciklus elejére
+        }
+
+        safe_printf("MQTT connect ok! %s\n", address.c_str());
+
+        // Sikeres csatlakozás után újra fel kell iratkozni a témakörökre!
+        printf("Subscribe to topics...\n");
+        for (int i = 0; i < topicList.size(); i++) {
+            if ((rc = MQTTClient_subscribe(client, topicList[i].c_str(), 1)) != MQTTCLIENT_SUCCESS) {
+                fprintf(stderr, "Failed to resubscribe, error code: %d\n", rc);
+                // Nem lépünk ki, a ciklus újrapróbálja a kapcsolatot bontani és újrakötni
+                MQTTClient_disconnect(client, TIMEOUT);
+            } else {
+                safe_printf("Successful resubscription.\n\n");
+            }
+        }
     }
 }
 
@@ -77,7 +77,7 @@ bool MeshMqttClient::aes_decrypt_meshtastic_payload(const uint8_t* key, uint16_t
     int ret = mbedtls_aes_setkey_enc(&aes_ctx, key, keySize);
     if (ret != 0) {
         safe_printf("mbedtls_aes_setkey_enc failed with error: -0x%04x", -ret);
-        //mbedtls_aes_free(&aes_ctx);
+        // mbedtls_aes_free(&aes_ctx);
         return false;
     }
     uint8_t nonce[16];
@@ -89,7 +89,7 @@ bool MeshMqttClient::aes_decrypt_meshtastic_payload(const uint8_t* key, uint16_t
     ret = mbedtls_aes_crypt_ctr(&aes_ctx, len, &nc_off, nonce, stream_block, encrypted_in, decrypted_out);
     if (ret != 0) {
         safe_printf("mbedtls_aes_crypt_ctr failed with error: -0x%04x", -ret);
-        //mbedtls_aes_free(&aes_ctx);
+        // mbedtls_aes_free(&aes_ctx);
         return false;
     }
     return true;
@@ -103,6 +103,7 @@ bool MeshMqttClient::pb_decode_from_bytes(const uint8_t* srcbuf, size_t srcbufsi
     pb_istream_t stream = pb_istream_from_buffer(srcbuf, srcbufsize);
     if (!pb_decode(&stream, fields, dest_struct)) {
         safe_printf("Can't decode protobuf reason='%s', pb_msgdesc %p", PB_GET_ERROR(&stream), fields);
+        pb_release(fields, dest_struct);
         return false;
     } else {
         return true;
@@ -278,8 +279,8 @@ void MeshMqttClient::sendMeshtasticNodeinfo(uint32_t src_node, std::string& shor
     uint32_t packetId = static_cast<uint32_t>(rand()) | 0xB0000000;
 
     meshtastic_User nodeinfo = {};
-    strncpy(nodeinfo.short_name, short_name.c_str(), 4);
-    memcpy(nodeinfo.long_name, long_name.c_str(), 40);
+    snprintf(nodeinfo.short_name, sizeof(nodeinfo.short_name), "%s", short_name.c_str());
+    snprintf(nodeinfo.long_name, sizeof(nodeinfo.long_name), "%s", long_name.c_str());
 
     uint8_t pbnodeinfo[meshtastic_User_size] = {0};
     pb_ostream_t steam_nodeinfo = pb_ostream_from_buffer(pbnodeinfo, sizeof(pbnodeinfo));
@@ -372,6 +373,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
         meshtastic_Data decodedtmp;
         if (!pb_decode_from_bytes(data, len, &meshtastic_ServiceEnvelope_msg, &serviceEnv)) {
             safe_printf("Service env decode failed\r\n");
+            pb_release(&meshtastic_ServiceEnvelope_msg, &serviceEnv);
             return -1;  // decoding failed
         }
         safe_printf("msgId: %d\r\n", serviceEnv.packet->id);
@@ -456,6 +458,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                 } else {
                     // safe_printf("Failed to decode Position\r\n");
                 }
+                pb_release(&meshtastic_Position_msg, &position_msg);
             } else if (decodedtmp.portnum == 4) {
                 // payload: protobuf User
                 meshtastic_User user_msg = {};
@@ -471,18 +474,22 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                     node_info.role = user_msg.role;
                     node_info.hw_model = user_msg.hw_model;
                     intOnNodeInfo(header, node_info, decodedtmp.want_response);
+
                 } else {
                     // safe_printf("Failed to decode User\r\n");
                 }
+                pb_release(&meshtastic_User_msg, &user_msg);
             } else if (decodedtmp.portnum == 5) {
                 printf("Received a routing packet\r\n");
                 // payload: protobuf Routing
                 meshtastic_Routing routing_msg = {};  // todo process it. this is just a debug. or simply drop it.
                 if (pb_decode_from_bytes(decodedtmp.payload.bytes, decodedtmp.payload.size, &meshtastic_Routing_msg, &routing_msg)) {
                     // safe_printf("Routing reply count: %d\r\n", routing_msg.route_reply.route_count);
+
                 } else {
                     // safe_printf("Failed to decode Routing\r\n");
                 }
+                pb_release(&meshtastic_Routing_msg, &routing_msg);
             } else if (decodedtmp.portnum == 6) {
                 // safe_printf("Received an admin packet\r\n");
                 //  payload: protobuf AdminMessage
@@ -510,9 +517,11 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                     waypoint.has_latitude_i = waypoint_msg.has_latitude_i;
                     waypoint.has_longitude_i = waypoint_msg.has_longitude_i;
                     intOnWaypointMessage(header, waypoint);
+
                 } else {
                     // safe_printf("Failed to decode Waypoint\r\n");
                 }
+                pb_release(&meshtastic_Waypoint_msg, &waypoint_msg);
             } else if (decodedtmp.portnum == 10) {
                 // safe_printf("Received a detection sensor packet\r\n");
                 //  payload: utf8 text
@@ -529,9 +538,11 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                 meshtastic_KeyVerification key_verification_msg = {};  // todo drop?
                 if (pb_decode_from_bytes(decodedtmp.payload.bytes, decodedtmp.payload.size, &meshtastic_KeyVerification_msg, &key_verification_msg)) {
                     ;
+
                 } else {
                     // safe_printf("Failed to decode KeyVerification\r\n");
                 }
+                pb_release(&meshtastic_KeyVerification_msg, &key_verification_msg);
             } else if (decodedtmp.portnum == 32) {
                 // safe_printf("Received a reply packet");
                 //  payload: ASCII Plaintext //TODO determine the in/out part and send reply if needed
@@ -602,9 +613,11 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                             // skipping, not interesting yet PR-s are welcome
                             break;
                     };
+
                 } else {
                     // safe_printf("Failed to decode Telemetry");
                 }
+                pb_release(&meshtastic_Telemetry_msg, &telemetry_msg);
             } else if (decodedtmp.portnum == 70) {
                 // safe_printf("Received a TRACEROUTE_APP    packet");
                 //  payload: Protobuf RouteDiscovery
@@ -622,9 +635,11 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                     memcpy(route_discovery.route_back, route_discovery_msg.route_back, sizeof(route_discovery.route_back));
                     memcpy(route_discovery.snr_back, route_discovery_msg.snr_back, sizeof(route_discovery.snr_back));
                     intOnTraceroute(header, route_discovery);
+
                 } else {
                     // safe_printf("Failed to decode RouteDiscovery");
                 }
+                pb_release(&meshtastic_RouteDiscovery_msg, &route_discovery_msg);
             } else if (decodedtmp.portnum == 71) {
                 safe_printf("Received a NEIGHBORINFO_APP   packet");
                 meshtastic_NeighborInfo neighbor_info_msg = {};
@@ -632,10 +647,13 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                 } else {
                     // safe_printf("Failed to decode NeighborInfo");
                 }
+                pb_release(&meshtastic_NeighborInfo_msg, &neighbor_info_msg);
             } else {
                 safe_printf("Received an unhandled portnum: %d", decodedtmp.portnum);
             }
         }
+        pb_release(&meshtastic_Data_msg, &decodedtmp);
+        pb_release(&meshtastic_ServiceEnvelope_msg, &serviceEnv);
         return ret;
     }
     return false;

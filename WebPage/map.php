@@ -580,7 +580,7 @@ try {
             if (node.freq > 0) {
                 content += `<br>F: ${node.freq} MHz`;
             }
-            if (node.battery_level > 0) {
+            if (node.battery_voltage > 0) {
                 let batteryText = `🔋 ${node.battery_level}%`;
                 const voltage = parseFloat(node.battery_voltage);
                 if (voltage > 1.0 && voltage < 30) {
