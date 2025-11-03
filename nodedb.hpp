@@ -176,15 +176,21 @@ class NodeDb {
         sqlite3_finalize(stmt);
     }
 
-    void saveNodeMsgCnt(uint32_t nodeId, uint32_t msgCnt) {
+    void saveNodeMsgCnt(uint32_t nodeId, uint32_t msgCnt, uint32_t traceCnt, uint32_t telemetryCnt, uint32_t nodeInfoCnt, uint32_t posCnt) {
         std::lock_guard<std::mutex> lock(mtx);
         if (!db) return;
 
         sqlite3_stmt* stmt;
-        const char* sql = "UPDATE nodes SET msgcntph = ? WHERE node_id = ?";
+        uint32_t sumcnt = msgCnt + traceCnt + telemetryCnt + nodeInfoCnt + posCnt;
+        const char* sql = "UPDATE nodes SET msgcntph = ?, tracecntph = ?, telemetrycntph = ?, nodeinfocntph = ?, poscntph = ?, sumcntph = ? WHERE node_id = ?";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, msgCnt);
-            sqlite3_bind_int(stmt, 2, nodeId);
+            sqlite3_bind_int(stmt, 2, traceCnt);
+            sqlite3_bind_int(stmt, 3, telemetryCnt);
+            sqlite3_bind_int(stmt, 4, nodeInfoCnt);
+            sqlite3_bind_int(stmt, 5, posCnt);
+            sqlite3_bind_int(stmt, 6, sumcnt);
+            sqlite3_bind_int(stmt, 7, nodeId);
 
             if (sqlite3_step(stmt) != SQLITE_DONE) {
                 std::cerr << "Error updating node message count: " << sqlite3_errmsg(db) << std::endl;
@@ -211,7 +217,7 @@ class NodeDb {
             "battery_voltage REAL, "
             "freq INTEGER, "
             "role INTEGER, "
-            "uptime INTEGER, msgcntph INTEGER DEFAULT 0,"
+            "uptime INTEGER, sumcntph INTEGER DEFAULT 0, msgcntph INTEGER DEFAULT 0, tracecntph INTEGER DEFAULT 0, telemetrycntph INTEGER DEFAULT 0, nodeinfocntph INTEGER DEFAULT 0, poscntph INTEGER DEFAULT 0,"
             "last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP);";
         const char* sql2 =
             "CREATE TABLE IF NOT EXISTS chat ("

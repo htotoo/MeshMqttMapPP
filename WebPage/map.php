@@ -18,7 +18,7 @@ if ($sort_by === 'name') {
     $order_by_sql = 'ORDER BY long_name ASC';
 }
 if ($sort_by === 'msgcntph') {
-    $order_by_sql = 'ORDER BY msgcntph DESC';
+    $order_by_sql = 'ORDER BY sumcntph DESC';
 }
 
 
@@ -28,7 +28,7 @@ try {
     $db->setAttribute(PDO::ATTR_TIMEOUT, 5);
 
     $node_map = [];
-    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role, battery_voltage, uptime, msgcntph FROM nodes ' . $order_by_sql);
+    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role, battery_voltage, uptime, msgcntph, tracecntph, telemetrycntph, nodeinfocntph, poscntph, sumcntph FROM nodes ' . $order_by_sql);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as $row) {
         $hex = sprintf('%x', $row['node_id']);
@@ -61,6 +61,11 @@ try {
             'role' => $row['role'] ?? 0,
             'uptime' => $row['uptime'] ?? 0,
 			'msgcntph' => $row['msgcntph'] ?? 0,
+            'tracecntph' => $row['tracecntph'] ?? 0,
+            'telemetrycntph' => $row['telemetrycntph'] ?? 0,
+            'nodeinfocntph' => $row['nodeinfocntph'] ?? 0,
+            'poscntph' => $row['poscntph'] ?? 0,
+            'sumcntph' => $row['sumcntph'] ?? 0,
             'is_stale' => $is_stale
         ];
         $nodes[] = $node_data;
@@ -573,7 +578,7 @@ try {
             history.replaceState({ nodeId: node.node_id }, '', url.toString());
 			
             const roleText = ROLE_MAP_LONG[node.role] || 'Unknown';
-            let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}. Msgs: ${node.msgcntph}`;
+            let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}.<br>Cnt:${node.sumcntph} (Msg:${node.msgcntph}, Trc:${node.tracecntph}, Tel:${node.telemetrycntph}, NI:${node.nodeinfocntph}, Pos:${node.poscntph})`;
             
             const uptimeText = formatUptime(node.uptime);
             if (uptimeText) {
@@ -687,7 +692,7 @@ try {
                     <div>
                         <b>${node.long_name}</b> 
                         (${node.short_name} <span class="node-id-hex">${node.node_id_hex}</span>)
-                        <small>Last Seen: ${timeAgo(node.last_updated)}. Msgs: ${node.msgcntph}</small>
+                        <small>Last Seen: ${timeAgo(node.last_updated)}. <br>Cnt:${node.sumcntph} (Msg:${node.msgcntph}, Trc:${node.tracecntph}, Tel:${node.telemetrycntph}, NI:${node.nodeinfocntph}, Pos:${node.poscntph})</small>
                         ${uptimeHtml}
                     </div>
                     ${statsHtml ? `<div class="node-stats">${statsHtml}</div>` : ''}
