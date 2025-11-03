@@ -68,7 +68,7 @@ void MeshCoreDown::checkNew() {
             json_value_free(root_value);
             return;
         }
-        std::string lastmsg = "";
+
         size_t message_count = json_array_get_count(messages_array);
         for (size_t i = 0; i < message_count; i++) {
             JSON_Object* message_object = json_array_get_object(messages_array, i);
