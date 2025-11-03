@@ -18,6 +18,8 @@
 #include "telegram.hpp"
 #include "messageidtracker.hpp"
 #include "nodenamemap.hpp"
+#include "meshcoredown.hpp"
+#include "discord.hpp"
 
 #include "config.hpp"
 
@@ -37,7 +39,9 @@ MeshMqttClient localClient;
 MeshMqttClient mainClient;
 NodeDb nodeDb("nodes.db");
 TelegramPoster telegramPoster;
-
+DiscordBot discordBot868(DISCORD_LOG_868);
+DiscordBot discordBot433(DISCORD_LOG_433);
+MeshCoreDown meshcoreDown;
 
 #ifdef USECONSOLE
 // --- Command Callback Functions ---
@@ -143,8 +147,11 @@ void m_on_message(MC_Header& header, MC_TextMessage& message) {
     nodeDb.saveChatMessage(header.srcnode, message.chan, message.text, header.freq);
 
     std::string telegramMessage = std::to_string(message.chan) + "@" + std::to_string(header.freq) + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
-    safe_printf("Telegram: %s\n", telegramMessage.c_str());
+    std::string discordMessage = std::to_string(message.chan) + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
+    safe_printf("MSG: %s\n", telegramMessage.c_str());
     telegramPoster.queueMessage(telegramMessage);
+    if (header.freq == 868) discordBot868.queueMessage(discordMessage);
+    if (header.freq == 433) discordBot433.queueMessage(discordMessage);
 }
 
 void m_on_position_message(MC_Header& header, MC_Position& position, bool needReply) {
@@ -231,7 +238,7 @@ void handle_signal(int signal) {
 int main(int argc, char* argv[]) {
     signal(SIGINT, handle_signal);
 
-    #ifdef USECONSOLE
+#ifdef USECONSOLE
     CommandInterpreter interpreter;
 
     // Register the commands you want to support
@@ -245,7 +252,7 @@ int main(int argc, char* argv[]) {
 
     // Start listening for input in the background
     interpreter.start();
-    #endif
+#endif
     telegramPoster.setApiToken(TELEGRAM_TOKEN);
     telegramPoster.setChatId(TELEGRAM_CHAT_ID);
     safe_printf("Loading node names from database...\n");
@@ -279,6 +286,22 @@ int main(int argc, char* argv[]) {
         } catch (const std::exception& e) {
             std::cerr << e.what() << '\n';
         }
+        try {
+            discordBot868.loop();
+        } catch (const std::exception& e) {
+            std::cerr << e.what() << '\n';
+        }
+        try {
+            discordBot433.loop();
+        } catch (const std::exception& e) {
+            std::cerr << e.what() << '\n';
+        }
+        try {
+            meshcoreDown.loop();
+        } catch (const std::exception& e) {
+            std::cerr << e.what() << '\n';
+        }
+
         sleep(1);
         timer++;
         if (timer % 3600 == 0) {
@@ -290,9 +313,9 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Cleanly stop the command interpreter thread
-    #ifdef USECONSOLE
+// Cleanly stop the command interpreter thread
+#ifdef USECONSOLE
     interpreter.stop();
-    #endif
+#endif
     return 0;
 }
