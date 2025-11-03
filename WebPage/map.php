@@ -17,6 +17,9 @@ $order_by_sql = 'ORDER BY last_updated DESC';
 if ($sort_by === 'name') {
     $order_by_sql = 'ORDER BY long_name ASC';
 }
+if ($sort_by === 'msgcntph') {
+    $order_by_sql = 'ORDER BY msgcntph DESC';
+}
 
 
 try {
@@ -368,7 +371,8 @@ try {
                 <div id="sort-container">
                     Sort by:
                     <a href="?sort=last_updated" class="sort-link <?php if ($sort_by === 'last_updated') echo 'active'; ?>">Last Seen</a> |
-                    <a href="?sort=name" class="sort-link <?php if ($sort_by === 'name') echo 'active'; ?>">Name</a>
+                    <a href="?sort=name" class="sort-link <?php if ($sort_by === 'name') echo 'active'; ?>">Name</a> |
+					<a href="?sort=msgcntph" class="sort-link <?php if ($sort_by === 'msgcntph') echo 'active'; ?>">Msgs</a>
                 </div>
                 <div id="node-list"></div>
             </div>
