@@ -67,8 +67,11 @@ add_executable(meshlogger
     nodedb.cpp
     main.cpp
     telegram.cpp
+    meshcoredown.cpp
+    discord.cpp
     unishox2.cpp
     CommandInterpreter.cpp
+    parson.c
     ${MESHTASTIC_SOURCES}
     ${NANOPB_SOURCES}
 )
@@ -83,7 +86,7 @@ target_include_directories(meshlogger PRIVATE
     "${PAHO_MQTT_INCLUDE_DIR}"
     "${MBEDTLS_INCLUDE_DIR}"
     "${SQLITE3_INCLUDE_DIR}"
-    "${CURL_INCLUDE_DIR}" # ADDED
+    "${CURL_INCLUDE_DIR}" 
 )
 
 target_link_libraries(meshlogger PRIVATE

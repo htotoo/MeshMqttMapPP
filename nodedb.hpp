@@ -191,7 +191,7 @@ class NodeDb {
             "battery_voltage REAL, "
             "freq INTEGER, "
             "role INTEGER, "
-            "uptime INTEGER, "
+            "uptime INTEGER, msgcntph INTEGER DEFAULT 0,"
             "last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP);";
         const char* sql2 =
             "CREATE TABLE IF NOT EXISTS chat ("
