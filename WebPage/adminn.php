@@ -45,6 +45,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $deleted_count = $stmt->rowCount();
             $feedback_message = "Sikeres törlés. Eltávolított chat üzenetek száma: {$deleted_count}.";
         }
+
+        // --- ÚJ RÉSZ: 7 NAPNÁL RÉGEBBI SNR BEJEGYZÉSEK TÖRLÉSE ---
+        if (isset($_POST['delete_old_snr'])) {
+            // Feltételezzük, hogy az 'snr' táblában van egy 'timestamp' nevű oszlop.
+            $stmt = $db->prepare("DELETE FROM snr WHERE last_updated < datetime('now', '-7 days')");
+            $stmt->execute();
+            $deleted_count = $stmt->rowCount();
+            $feedback_message = "Sikeres törlés. Eltávolított 7 napnál régebbi SNR bejegyzések száma: {$deleted_count}.";
+        }
+        
+        // --- SNR TÁBLA TELJES TÖRLÉSE ---
+        if (isset($_POST['delete_all_snr'])) {
+            $stmt = $db->prepare("DELETE FROM snr"); // Nincs WHERE feltétel, mindent töröl
+            $stmt->execute();
+            $deleted_count = $stmt->rowCount();
+            $feedback_message = "Sikeres törlés. Az 'snr' táblából eltávolított sorok száma: {$deleted_count}.";
+        }
+
     } catch (PDOException $e) {
         // Hiba esetén üzenetet küldünk
         $feedback_message = "Adatbázis hiba történt: " . $e->getMessage();
@@ -86,12 +104,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 5px; 
             background-color: #f8f9fa;
         }
+        .task.danger {
+            border-color: #dc3545;
+            background-color: #fbe9e9;
+        }
         p { 
             color: #495057; 
             margin-top: 0;
         }
         button { 
-            background-color: #dc3545; 
+            background-color: #007bff; 
             color: white; 
             padding: 12px 20px; 
             border: none; 
@@ -101,7 +123,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             transition: background-color 0.2s;
         }
         button:hover { 
-            background-color: #c82333; 
+            background-color: #0056b3; 
+        }
+        button.danger-btn {
+            background-color: #dc3545;
+        }
+        button.danger-btn:hover {
+            background-color: #c82333;
         }
         .feedback { 
             padding: 15px; 
@@ -143,6 +171,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <button type="submit" name="delete_old_chats">Régi chatek törlése</button>
             </form>
         </div>
+
+        <div class="task">
+            <h2>Régi SNR bejegyzések törlése</h2>
+            <p>Ezzel a gombbal törölheti a 7 napnál régebbi SNR (Jel-Zaj Arány) bejegyzéseket az adatbázisból.</p>
+            <form method="POST" onsubmit="return confirm('Biztosan törölni szeretné a 7 napnál régebbi SNR bejegyzéseket? A művelet nem vonható vissza!');">
+                <button type="submit" name="delete_old_snr">7+ napos SNR-ek törlése</button>
+            </form>
+        </div>
+        <div class="task danger">
+            <h2>SNR tábla kiürítése</h2>
+            <p><strong>Figyelem:</strong> Ez a gomb az <code>snr</code> tábla <strong>teljes tartalmát</strong> törli, mindenféle feltétel nélkül. Ez a művelet nem vonható vissza!</p>
+            <form method="POST" onsubmit="return confirm('FIGYELEM!\n\nBiztosan törölni szeretné az SNR tábla TELJES TARTALMÁT? Ez a művelet végleges és nem vonható vissza!');">
+                <button type="submit" name="delete_all_snr" class="danger-btn">SNR tábla teljes törlése</button>
+            </form>
+        </div>
+
     </div>
 </body>
 </html>

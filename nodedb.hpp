@@ -29,13 +29,14 @@ class NodeDb {
         if (!db) return;
 
         sqlite3_stmt* stmt;
-        const char* sql = "SELECT node_id, short_name FROM nodes";
+        const char* sql = "SELECT node_id, short_name, msgcntph FROM nodes";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
             while (sqlite3_step(stmt) == SQLITE_ROW) {
                 uint32_t nodeId = sqlite3_column_int(stmt, 0);
                 const char* name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+                uint32_t msgCnt = sqlite3_column_int(stmt, 2);
                 if (!name) continue;
-                names.setNodeName(nodeId, name);
+                names.setNodeName(nodeId, name, 0);  // don't load, since new start, and new hourly stat started
             }
         } else {
             std::cerr << "Error preparing statement: " << sqlite3_errmsg(db) << std::endl;
@@ -168,6 +169,25 @@ class NodeDb {
 
             if (sqlite3_step(stmt) != SQLITE_DONE) {
                 std::cerr << "Error saving node SNR: " << sqlite3_errmsg(db) << std::endl;
+            }
+        } else {
+            std::cerr << "Error preparing statement: " << sqlite3_errmsg(db) << std::endl;
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    void saveNodeMsgCnt(uint32_t nodeId, uint32_t msgCnt) {
+        std::lock_guard<std::mutex> lock(mtx);
+        if (!db) return;
+
+        sqlite3_stmt* stmt;
+        const char* sql = "UPDATE nodes SET msgcntph = ? WHERE node_id = ?";
+        if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+            sqlite3_bind_int(stmt, 1, msgCnt);
+            sqlite3_bind_int(stmt, 2, nodeId);
+
+            if (sqlite3_step(stmt) != SQLITE_DONE) {
+                std::cerr << "Error updating node message count: " << sqlite3_errmsg(db) << std::endl;
             }
         } else {
             std::cerr << "Error preparing statement: " << sqlite3_errmsg(db) << std::endl;

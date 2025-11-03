@@ -42,6 +42,7 @@ TelegramPoster telegramPoster;
 DiscordBot discordBot868(DISCORD_LOG_868);
 DiscordBot discordBot433(DISCORD_LOG_433);
 MeshCoreDown meshcoreDown;
+time_t lastHourlyReset = 0;
 
 #ifdef USECONSOLE
 // --- Command Callback Functions ---
@@ -139,6 +140,7 @@ void m_on_message(MC_Header& header, MC_TextMessage& message) {
     if (messageIdTracker.check(header.packet_id)) {
         return;
     }
+    nodeNameMap.incrementMessageCount(header.srcnode);
     safe_printf("Message from node 0x%08" PRIx32 ": %s\n", header.srcnode, message.text.c_str());
     if (message.text.find("seq ", 0) == 0) {
         // return;
@@ -158,6 +160,7 @@ void m_on_position_message(MC_Header& header, MC_Position& position, bool needRe
     if (messageIdTrackerTelemetry.check(header.packet_id)) {
         return;
     }
+    nodeNameMap.incrementMessageCount(header.srcnode);
     if (!position.has_latitude_i || !position.has_longitude_i) {
         return;
     }
@@ -175,12 +178,14 @@ void m_on_node_info(MC_Header& header, MC_NodeInfo& nodeinfo, bool needReply) {
     safe_printf("Node Info from node 0x%08" PRIx32 ": ID: %s, Short Name: %s, Long Name: %s\n", header.srcnode, nodeinfo.id, nodeinfo.short_name, nodeinfo.long_name);
     nodeDb.setNodeInfo(header.srcnode, nodeinfo.short_name, nodeinfo.long_name, header.freq, nodeinfo.role);
     nodeNameMap.setNodeName(header.srcnode, nodeinfo.short_name);
+    nodeNameMap.incrementMessageCount(header.srcnode);
 }
 
 void m_on_waypoint_message(MC_Header& header, MC_Waypoint& waypoint) {
     if (messageIdTrackerTelemetry.check(header.packet_id)) {
         return;
     }
+    nodeNameMap.incrementMessageCount(header.srcnode);
     safe_printf("Waypoint from node 0x%08" PRIx32 ": Lat: %d, Lon: %d, Name: %s\n", header.srcnode, waypoint.latitude_i, waypoint.longitude_i, waypoint.name);
 }
 
@@ -188,6 +193,7 @@ void m_on_telemetry_device(MC_Header& header, MC_Telemetry_Device& telemetry) {
     if (messageIdTrackerTelemetry.check(header.packet_id)) {
         return;
     }
+    nodeNameMap.incrementMessageCount(header.srcnode);
     nodeDb.setNodeTelemetryDevice(header.srcnode, telemetry.battery_level, telemetry.voltage, telemetry.has_uptime_seconds ? telemetry.uptime_seconds : 0);
     safe_printf("Telemetry Device from node 0x%08" PRIx32 ": Battery: %d, Uptime: %d, Voltage: %d, Channel Utilization: %d\n", header.srcnode, telemetry.battery_level, telemetry.uptime_seconds, telemetry.voltage, telemetry.channel_utilization);
 }
@@ -195,6 +201,7 @@ void m_on_telemetry_environment(MC_Header& header, MC_Telemetry_Environment& tel
     if (messageIdTrackerTelemetry.check(header.packet_id)) {
         return;
     }
+    nodeNameMap.incrementMessageCount(header.srcnode);
     safe_printf("Telemetry Environment from node 0x%08" PRIx32 ": Temperature: %d, Humidity: %d, Pressure: %d, Lux: %d\n", header.srcnode, telemetry.temperature, telemetry.humidity, telemetry.pressure, telemetry.lux);
     nodeDb.setNodeTemperature(header.srcnode, telemetry.temperature);
 }
@@ -207,6 +214,7 @@ void m_on_traceroute(MC_Header& header, MC_RouteDiscovery& route, bool for_me, b
         safe_printf("Skip bc mqtt\n");
         return;
     }
+    nodeNameMap.incrementMessageCount(header.srcnode);
     // Print the route details if needed
     uint32_t n1 = (route.route_back_count > 0) ? header.dstnode : header.srcnode;
     safe_printf("Traceroute from node 0x%08" PRIx32 ": Route Count: %d\n", n1, route.route_count);
@@ -310,6 +318,20 @@ int main(int argc, char* argv[]) {
         if ((timer % (3600 * 4)) == 0) {
             std::string rt = "msh/EU_868";
             mainClient.sendMeshtasticMsg(0xabbababa, globalad, rt, 2);
+        }
+
+        time_t now = time(nullptr);
+        if (now - lastHourlyReset >= 3600) {
+            bool needsave = lastHourlyReset != 0;
+            lastHourlyReset = now;
+            if (needsave) {
+                safe_printf("Hourly node message counts:\n");
+                nodeNameMap.saveMessageCounts([](uint32_t nodeId, uint32_t msgCnt) {
+                    // safe_printf("Node 0x%08" PRIx32 ": %d messages\n", nodeId, msgCnt);
+                    nodeDb.saveNodeMsgCnt(nodeId, msgCnt);
+                });
+            }
+            nodeNameMap.resetMessageCount();
         }
     }
 
