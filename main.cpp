@@ -330,8 +330,14 @@ int main(int argc, char* argv[]) {
                     // safe_printf("Node 0x%08" PRIx32 ": %d messages\n", nodeId, msgCnt);
                     nodeDb.saveNodeMsgCnt(nodeId, msgCnt, traceCnt, telemetryCnt, nodeInfoCnt, posCnt);
                 });
+                uint32_t msgnum_all = mainClient.msgnum_all + localClient.msgnum_all;
+                uint32_t msgnum_decoded = mainClient.msgnum_decoded + localClient.msgnum_decoded;
+                uint32_t msgnum_handled = mainClient.msgnum_handled + localClient.msgnum_handled;
+                nodeDb.saveGlobalStats(msgnum_all, msgnum_decoded, msgnum_handled);
             }
             nodeNameMap.resetMessageCount();
+            mainClient.resetStats();
+            localClient.resetStats();
         }
     }
 

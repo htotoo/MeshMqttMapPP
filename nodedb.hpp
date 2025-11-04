@@ -63,6 +63,17 @@ class NodeDb {
             std::cerr << "Error preparing statement: " << sqlite3_errmsg(db) << std::endl;
         }
         sqlite3_finalize(stmt);
+
+        const char* sql2 = "UPDATE nodes SET  last_updated = CURRENT_TIMESTAMP WHERE node_id = ?";
+        if (sqlite3_prepare_v2(db, sql2, -1, &stmt, nullptr) == SQLITE_OK) {
+            sqlite3_bind_int(stmt, 1, nodeId);
+            if (sqlite3_step(stmt) != SQLITE_DONE) {
+                std::cerr << "Error updating node last_updated: " << sqlite3_errmsg(db) << std::endl;
+            }
+        } else {
+            std::cerr << "Error preparing statement: " << sqlite3_errmsg(db) << std::endl;
+        }
+        sqlite3_finalize(stmt);
     }
 
     void setNodeInfo(uint32_t nodeId, const std::string& shortName, const std::string& longName, uint16_t freq, uint8_t role) {
@@ -201,6 +212,26 @@ class NodeDb {
         sqlite3_finalize(stmt);
     }
 
+    void saveGlobalStats(uint32_t allCnt, uint32_t decodedCnt, uint32_t handledCnt) {
+        std::lock_guard<std::mutex> lock(mtx);
+        if (!db) return;
+
+        sqlite3_stmt* stmt;
+        const char* sql = "INSERT INTO mainstats (allcnt, decoded, handled) VALUES (?, ?, ?)";
+        if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+            sqlite3_bind_int(stmt, 1, allCnt);
+            sqlite3_bind_int(stmt, 2, decodedCnt);
+            sqlite3_bind_int(stmt, 3, handledCnt);
+
+            if (sqlite3_step(stmt) != SQLITE_DONE) {
+                std::cerr << "Error inserting global stats: " << sqlite3_errmsg(db) << std::endl;
+            }
+        } else {
+            std::cerr << "Error preparing statement: " << sqlite3_errmsg(db) << std::endl;
+        }
+        sqlite3_finalize(stmt);
+    }
+
    private:
     void createTables() {
         const char* sql =
@@ -235,6 +266,7 @@ class NodeDb {
             "last_updated TIMESTAMP DEFAULT (CURRENT_TIMESTAMP) );";
         const char* sql4 = "CREATE UNIQUE INDEX IF NOT EXISTS n1n2 ON snr ( node1, node2);";
 
+        const char* sql5 = "CREATE TABLE mainstats (    allcnt  INTEGER   DEFAULT (0),    decoded INTEGER   DEFAULT (0),    handled INTEGER   DEFAULT (0),    time    TIMESTAMP DEFAULT (CURRENT_TIMESTAMP) );";
         if (db) {
             char* errMsg = nullptr;
             if (sqlite3_exec(db, sql, nullptr, nullptr, &errMsg) != SQLITE_OK) {
@@ -253,6 +285,11 @@ class NodeDb {
                 errMsg = nullptr;
             }
             if (sqlite3_exec(db, sql4, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+                std::cerr << "SQL error: " << errMsg << std::endl;
+                sqlite3_free(errMsg);
+                errMsg = nullptr;
+            }
+            if (sqlite3_exec(db, sql5, nullptr, nullptr, &errMsg) != SQLITE_OK) {
                 std::cerr << "SQL error: " << errMsg << std::endl;
                 sqlite3_free(errMsg);
                 errMsg = nullptr;

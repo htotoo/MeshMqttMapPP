@@ -77,6 +77,15 @@ class MeshMqttClient {
 
     void addTopic(std::string topic) { topicList.push_back(topic); }
 
+    void resetStats() {
+        msgnum_all = 0;
+        msgnum_decoded = 0;
+        msgnum_handled = 0;
+    }
+    uint32_t msgnum_all = 0;
+    uint32_t msgnum_decoded = 0;
+    uint32_t msgnum_handled = 0;
+
    private:
     MQTTClient client;
     mbedtls_aes_context aes_ctx;

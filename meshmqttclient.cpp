@@ -367,6 +367,7 @@ void MeshMqttClient::sendMeshtasticNodeinfo(uint32_t src_node, std::string& shor
 
 int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
     if (len > 0) {
+        msgnum_all++;
         MC_Header header;  // for compatibility reason
         meshtastic_ServiceEnvelope serviceEnv;
         meshtastic_MeshPacket packet;
@@ -415,6 +416,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
         }
 
         if (ret >= 0) {
+            msgnum_decoded++;
             // extract the want_response from bitfield
             decodedtmp.want_response = false;  // packet.want_response;
             /*safe_printf("PortNum: %d  PacketId: %lu  Src: %lu\r\n", decodedtmp.portnum, header.packet_id, header.srcnode);
@@ -438,6 +440,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                 */
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(decodedtmp.payload.bytes), decodedtmp.payload.size), (uint8_t)ret, MC_MESSAGE_TYPE_TEXT};
                 intOnMessage(header, msg);
+                msgnum_handled++;
             } else if (decodedtmp.portnum == 2) {
                 // safe_printf("Received a remote hardware packet\r\n");
                 //  payload: protobuf HardwareMessage - NOT INTERESTED IN YET
@@ -455,6 +458,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                 if (pb_decode_from_bytes(decodedtmp.payload.bytes, decodedtmp.payload.size, &meshtastic_Position_msg, &position_msg)) {
                     MC_Position position = {.latitude_i = position_msg.latitude_i, .longitude_i = position_msg.longitude_i, .altitude = position_msg.altitude, .ground_speed = position_msg.ground_speed, .sats_in_view = position_msg.sats_in_view, .location_source = (uint8_t)position_msg.location_source, .has_latitude_i = position_msg.has_latitude_i, .has_longitude_i = position_msg.has_longitude_i, .has_altitude = position_msg.has_altitude, .has_ground_speed = position_msg.has_ground_speed};
                     intOnPositionMessage(header, position, decodedtmp.want_response);
+                    msgnum_handled++;
                 } else {
                     // safe_printf("Failed to decode Position\r\n");
                 }
@@ -474,6 +478,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                     node_info.role = user_msg.role;
                     node_info.hw_model = user_msg.hw_model;
                     intOnNodeInfo(header, node_info, decodedtmp.want_response);
+                    msgnum_handled++;
 
                 } else {
                     // safe_printf("Failed to decode User\r\n");
@@ -501,6 +506,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                 size_t uncompressed_size = unishox2_decompress((const char*)&decodedtmp.payload.bytes, decodedtmp.payload.size, uncompressed_data, sizeof(uncompressed_data), USX_PSET_DFLT);
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(uncompressed_data), uncompressed_size), (uint8_t)ret, MC_MESSAGE_TYPE_TEXT};
                 intOnMessage(header, msg);
+                msgnum_handled++;
             } else if (decodedtmp.portnum == 8) {
                 // safe_printf("Received a waypoint packet\r\n");
                 //  payload: protobuf Waypoint
@@ -517,7 +523,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                     waypoint.has_latitude_i = waypoint_msg.has_latitude_i;
                     waypoint.has_longitude_i = waypoint_msg.has_longitude_i;
                     intOnWaypointMessage(header, waypoint);
-
+                    msgnum_handled++;
                 } else {
                     // safe_printf("Failed to decode Waypoint\r\n");
                 }
@@ -527,11 +533,13 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                 //  payload: utf8 text
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(decodedtmp.payload.bytes), decodedtmp.payload.size), (uint8_t)ret, MC_MESSAGE_TYPE_DETECTOR_SENSOR};
                 intOnMessage(header, msg);
+                msgnum_handled++;
             } else if (decodedtmp.portnum == 11) {
                 // safe_printf("Received an alert packet\r\n");
                 //  payload: utf8 text
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(decodedtmp.payload.bytes), decodedtmp.payload.size), (uint8_t)ret, MC_MESSAGE_TYPE_ALERT};
                 intOnMessage(header, msg);
+                msgnum_handled++;
             } else if (decodedtmp.portnum == 12) {
                 // safe_printf("Received a key verification packet\r\n");
                 //  payload: protobuf KeyVerification
@@ -548,6 +556,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                 //  payload: ASCII Plaintext //TODO determine the in/out part and send reply if needed
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(decodedtmp.payload.bytes), decodedtmp.payload.size), (uint8_t)ret, MC_MESSAGE_TYPE_PING};
                 intOnMessage(header, msg);
+                msgnum_handled++;
             } else if (decodedtmp.portnum == 34) {
                 // safe_printf("Received a paxcounter packet\r\n");
                 // payload: protobuf DROP
@@ -556,6 +565,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                 // payload: uart rx/tx data
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(decodedtmp.payload.bytes), decodedtmp.payload.size), (uint8_t)ret, MC_MESSAGE_TYPE_UART};
                 intOnMessage(header, msg);
+                msgnum_handled++;
             } else if (decodedtmp.portnum == 65) {
                 // safe_printf("Received a STORE_FORWARD_APP  packet\r\n");
                 //  payload: ?
@@ -564,6 +574,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                 //  payload: ascii text
                 MC_TextMessage msg = {std::string(reinterpret_cast<const char*>(decodedtmp.payload.bytes), decodedtmp.payload.size), (uint8_t)ret, MC_MESSAGE_TYPE_RANGE_TEST};
                 intOnMessage(header, msg);
+                msgnum_handled++;
             } else if (decodedtmp.portnum == 67) {
                 // safe_printf("Received a TELEMETRY_APP   packet\r\n");
                 //  payload: Protobuf
@@ -582,6 +593,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                             device_metrics.has_voltage = telemetry_msg.variant.device_metrics.has_voltage;
                             device_metrics.has_channel_utilization = telemetry_msg.variant.device_metrics.has_channel_utilization;
                             intOnTelemetryDevice(header, device_metrics);
+                            msgnum_handled++;
                             break;
                         case meshtastic_Telemetry_environment_metrics_tag:
                             MC_Telemetry_Environment environment_metrics;
@@ -594,6 +606,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                             environment_metrics.has_pressure = telemetry_msg.variant.environment_metrics.has_barometric_pressure;
                             environment_metrics.has_lux = telemetry_msg.variant.environment_metrics.has_lux;
                             intOnTelemetryEnvironment(header, environment_metrics);
+                            msgnum_handled++;
                             break;
                         case meshtastic_Telemetry_air_quality_metrics_tag:
                             // safe_printf("Air Quality Metrics: PM2.5: %lu ", telemetry_msg.variant.air_quality_metrics.pm25_standard);
@@ -635,7 +648,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                     memcpy(route_discovery.route_back, route_discovery_msg.route_back, sizeof(route_discovery.route_back));
                     memcpy(route_discovery.snr_back, route_discovery_msg.snr_back, sizeof(route_discovery.snr_back));
                     intOnTraceroute(header, route_discovery);
-
+                    msgnum_handled++;
                 } else {
                     // safe_printf("Failed to decode RouteDiscovery");
                 }
