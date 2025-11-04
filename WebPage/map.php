@@ -521,11 +521,11 @@ try {
         const ROLE_MAP_LONG = {
             0: 'Client', 1: 'Client Mute', 2: 'Router', 3: 'Router Client',
             4: 'Repeater', 5: 'Tracker', 6: 'Sensor', 7: 'TAK',
-            8: 'Client Hidden', 9: 'Lost and Found', 10: 'TAK Tracker', 11: 'Router Late'
+            8: 'Client Hidden', 9: 'Lost and Found', 10: 'TAK Tracker', 11: 'Router Late', 12: 'Client base'
         };
         const ROLE_MAP_SHORT = {
             0: 'C', 1: 'CM', 2: 'R', 3: 'RC', 4: 'RP', 5: 'TR',
-            6: 'SN', 7: 'TAK', 8: 'CH', 9: 'LF', 10: 'TT', 11: 'RL'
+            6: 'SN', 7: 'TAK', 8: 'CH', 9: 'LF', 10: 'TT', 11: 'RL', 12: 'CB'
         };
         
         const redIcon = new L.Icon({
