@@ -73,7 +73,7 @@ try {
     }
     $node_count = count($nodes);
 
-    $snr_stmt = $db->query("SELECT node1, node2, snr FROM snr WHERE last_updated >= date('now', '-14 days') AND node1 != node2 AND snr != 0");
+    $snr_stmt = $db->query("SELECT node1, node2, snr FROM snr WHERE last_updated >= date('now', '-7 days') AND node1 != node2 AND snr != 0");
     $snr_data = $snr_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
@@ -175,6 +175,17 @@ try {
             font-weight: bold;
             text-align: center;
             flex-shrink: 0;
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            gap: 10px; 
+        }
+        #stats-button {
+            font-size: 0.8em;
+            font-weight: normal;
+            cursor: pointer;
+            color: #007bff;
+            text-decoration: underline;
         }
         #filter-container {
             padding: 10px 10px 5px 10px;
@@ -340,6 +351,65 @@ try {
             overflow-y: auto;
             padding-right: 5px;
         }
+        
+        /* --- MODAL STYLES --- */
+        #stats-modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+			background-color: #fefefe;
+			color: #333;
+			margin: 5vh auto; /* Changed to vh for better vertical centering */
+			padding: 20px;
+			border: 1px solid #888;
+			width: 90%;
+			max-width: 600px;
+			border-radius: 8px;
+			box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+			max-height: 90vh;
+			overflow-y: auto;
+		}
+        .modal-content h2 {
+            margin-top: 0;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 10px;
+        }
+        .modal-content h3 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        .modal-content ul {
+            list-style-type: disc;
+            padding-left: 20px;
+        }
+        .modal-content li {
+            margin-bottom: 5px;
+        }
+        .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            line-height: 1;
+        }
+        .close-btn:hover,
+        .close-btn:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        /* --- END MODAL STYLES --- */
+
 
         @media (max-width: 768px) {
             #node-list-panel {
@@ -355,6 +425,10 @@ try {
             #panel-header {
                 font-size: 1.1em;
             }
+            
+            .modal-content {
+                margin: 5% auto;
+            }
         }
     </style>
 </head>
@@ -364,7 +438,9 @@ try {
         <div id="top-section">
             <div id="node-list-panel">
                 <div id="panel-header">
-                    <span><a href="/">🏡</a></span><span>All Nodes (<?php echo $node_count; ?>)</span>
+                    <span><a href="/">🏡</a></span>
+                    <span>All Nodes (<?php echo $node_count; ?>)</span>
+                    <span id="stats-button">[Stats]</span>
                 </div>
                 <div id="filter-container">
                     <input type="text" id="node-filter-input" placeholder="Filter by name or ID...">
@@ -426,6 +502,16 @@ try {
                 <?php else: ?>
                     <p>No messages in the last 5 days.</p>
                 <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <div id="stats-modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>Mesh Statistics</h2>
+            <div id="stats-content">
+                <p>Loading...</p>
             </div>
         </div>
     </div>
@@ -911,7 +997,6 @@ try {
                 map.addLayer(allMarkersCluster);
             }
         }
-        // --- MODIFICATION END ---
 
 
         function onFilterChange() {
@@ -930,6 +1015,264 @@ try {
             }
         });
         
+        // --- STATS MODAL JAVASCRIPT ---
+        const statsModal = document.getElementById('stats-modal');
+        const statsButton = document.getElementById('stats-button');
+        const statsCloseBtn = statsModal.querySelector('.close-btn');
+        const statsContent = document.getElementById('stats-content');
+
+function calculateAndShowStats() {
+            if (!nodes || nodes.length === 0) {
+                statsContent.innerHTML = '<p>No node data to analyze.</p>';
+                return;
+            }
+
+            const nodesById = Object.fromEntries(nodes.map(n => [n.node_id, n]));
+            const getNodeName = (nodeId) => {
+                const node = nodesById[nodeId];
+			    if (!node) {
+					const hexId = (nodeId >>> 0).toString(16);
+					const shortHex = hexId.substr(-8);
+					return `!${shortHex}`;
+				}
+                const name = node.short_name !== 'N/A' ? node.short_name : node.long_name;
+                return name !== 'N/A' ? name : node.node_id_hex;
+            };
+
+            let totalNodes = nodes.length; 
+            let nodesWithCoords = 0;
+            let staleNodes = 0;
+            let onlineNodes = 0;
+            
+            let totalSumCntPh = 0;
+            let totalMsgCntPh = 0;
+            let totalTraceCntPh = 0;
+            let totalTelemetryCntPh = 0;
+            let totalNodeInfoCntPh = 0;
+            let totalPosCntPh = 0;
+            
+            let sumBattery = 0;
+            let countBatteryNodes = 0;
+            let sumUptime = 0;
+            let countUptimeNodes = 0;
+            
+            let roleCounts = {};
+            let freqCounts = {};
+
+            // --- Variables to track top senders ---
+            let maxMsgCntPh = 0;
+            let topMsgNodeName = 'N/A';
+            let maxTraceCntPh = 0;
+            let topTraceNodeName = 'N/A';
+            let maxTelemetryCntPh = 0;
+            let topTelemetryNodeName = 'N/A';
+            let maxNodeInfoCntPh = 0;
+            let topNodeInfoNodeName = 'N/A';
+            let maxPosCntPh = 0;
+            let topPosNodeName = 'N/A';
+
+            nodes.forEach(node => {
+                if (node.latitude !== 0 || node.longitude !== 0) nodesWithCoords++;
+                if (node.is_stale) {
+                    staleNodes++;
+                } else {
+                    onlineNodes++;
+                    const nodeSumCnt = parseFloat(node.sumcntph) || 0;
+                    const nodeMsgCnt = parseFloat(node.msgcntph) || 0;
+                    const nodeTraceCnt = parseFloat(node.tracecntph) || 0;
+                    const nodeTelemetryCnt = parseFloat(node.telemetrycntph) || 0;
+                    const nodeNodeInfoCnt = parseFloat(node.nodeinfocntph) || 0;
+                    const nodePosCnt = parseFloat(node.poscntph) || 0;
+
+                    totalSumCntPh += nodeSumCnt;
+                    totalMsgCntPh += nodeMsgCnt;
+                    totalTraceCntPh += nodeTraceCnt;
+                    totalTelemetryCntPh += nodeTelemetryCnt;
+                    totalNodeInfoCntPh += nodeNodeInfoCnt;
+                    totalPosCntPh += nodePosCnt;
+                    
+                    if (node.battery_level > 0) {
+                        sumBattery += parseFloat(node.battery_level) || 0;
+                        countBatteryNodes++;
+                    }
+                    if (node.uptime > 0) {
+                        sumUptime += parseFloat(node.uptime) || 0;
+                        countUptimeNodes++;
+                    }
+
+                    // --- Check for top senders ---
+                    const nodeDisplayName = node.short_name !== 'N/A' ? node.short_name : node.long_name;
+                    
+                    if (nodeMsgCnt > maxMsgCntPh) {
+                        maxMsgCntPh = nodeMsgCnt;
+                        topMsgNodeName = nodeDisplayName;
+                    }
+                    if (nodeTraceCnt > maxTraceCntPh) {
+                        maxTraceCntPh = nodeTraceCnt;
+                        topTraceNodeName = nodeDisplayName;
+                    }
+                    if (nodeTelemetryCnt > maxTelemetryCntPh) {
+                        maxTelemetryCntPh = nodeTelemetryCnt;
+                        topTelemetryNodeName = nodeDisplayName;
+                    }
+                    if (nodeNodeInfoCnt > maxNodeInfoCntPh) {
+                        maxNodeInfoCntPh = nodeNodeInfoCnt;
+                        topNodeInfoNodeName = nodeDisplayName;
+                    }
+                    if (nodePosCnt > maxPosCntPh) {
+                        maxPosCntPh = nodePosCnt;
+                        topPosNodeName = nodeDisplayName;
+                    }
+                }
+
+                // Count all nodes for distribution
+                roleCounts[node.role] = (roleCounts[node.role] || 0) + 1;
+                freqCounts[node.freq] = (freqCounts[node.freq] || 0) + 1;
+            });
+
+            // --- Calculate Msgs/sec ---
+            const totalSumCntPs = totalSumCntPh / 3600; // 60 min * 60 sec
+
+            const avgBatteryLevel = (countBatteryNodes > 0) ? (sumBattery / countBatteryNodes) : 0;
+            const avgUptimeSeconds = (countUptimeNodes > 0) ? (sumUptime / countUptimeNodes) : 0;
+            const avgUptimeString = formatUptime(avgUptimeSeconds) || 'N/A';
+
+            // --- Calculate SNR Stats ---
+            let sumSnr = 0;
+            let countSnr = 0;
+            let minSnr = 999;
+            let maxSnr = -999;
+            let minSnrNode1Id = null;
+            let minSnrNode2Id = null;
+            let maxSnrNode1Id = null;
+            let maxSnrNode2Id = null;
+            
+            let snrGood = 0; // > 0
+            let snrOkay = 0; // 0 to -5
+            let snrWeak = 0; // -5 to -10
+            let snrBad = 0;  // < -10
+
+            if (snrData && snrData.length > 0) {
+                snrData.forEach(link => {
+                    const snr = parseFloat(link.snr);
+                    if (snr === 0) return; // Should be filtered by SQL, but safe to check
+
+                    sumSnr += snr;
+                    countSnr++;
+
+                    if (snr < minSnr) {
+                        minSnr = snr;
+                        minSnrNode1Id = link.node1;
+                        minSnrNode2Id = link.node2;
+                    }
+                    if (snr > maxSnr) {
+                        maxSnr = snr;
+                        maxSnrNode1Id = link.node1;
+                        maxSnrNode2Id = link.node2;
+                    }
+
+                    if (snr > 0) {
+                        snrGood++;
+                    } else if (snr >= -5) {
+                        snrOkay++;
+                    } else if (snr >= -10) {
+                        snrWeak++;
+                    } else {
+                        snrBad++;
+                    }
+                });
+            }
+
+            const avgSnr = (countSnr > 0) ? (sumSnr / countSnr) : 0;
+            let bestLinkName = 'N/A';
+            if (maxSnrNode1Id) {
+                bestLinkName = `${getNodeName(maxSnrNode1Id)} → ${getNodeName(maxSnrNode2Id)}`;
+            }
+            let worstLinkName = 'N/A';
+            if (minSnrNode1Id) {
+                worstLinkName = `${getNodeName(minSnrNode1Id)} → ${getNodeName(minSnrNode2Id)}`;
+            }
+            // --- END SNR CALC ---
+            
+            // --- Build HTML ---
+            let htmlString = '<h3>Node Status</h3><ul>';
+            htmlString += `<li>Total Nodes: <strong>${totalNodes}</strong></li>`;
+            htmlString += `<li>Online Nodes: <strong>${onlineNodes}</strong></li>`;
+            htmlString += `<li>Stale Nodes: <strong>${staleNodes}</strong></li>`;
+            htmlString += `<li>Nodes with GPS: <strong>${nodesWithCoords}</strong></li>`;
+            htmlString += '</ul>';
+
+            htmlString += '<h3>Message Counts (from online nodes)</h3><ul>';
+            htmlString += `<li><strong>Total All Msgs/hr: ${totalSumCntPh.toFixed(2)}</strong> <em>(${totalSumCntPs.toFixed(4)} msgs/sec)</em></li>`;
+            htmlString += `<li>Text Msgs/hr: ${totalMsgCntPh.toFixed(2)} <em>(Top: ${topMsgNodeName} - ${maxMsgCntPh.toFixed(2)})</em></li>`;
+            htmlString += `<li>Traceroute/hr: ${totalTraceCntPh.toFixed(2)} <em>(Top: ${topTraceNodeName} - ${maxTraceCntPh.toFixed(2)})</em></li>`;
+            htmlString += `<li>Telemetry/hr: ${totalTelemetryCntPh.toFixed(2)} <em>(Top: ${topTelemetryNodeName} - ${maxTelemetryCntPh.toFixed(2)})</em></li>`;
+            htmlString += `<li>NodeInfo/hr: ${totalNodeInfoCntPh.toFixed(2)} <em>(Top: ${topNodeInfoNodeName} - ${maxNodeInfoCntPh.toFixed(2)})</em></li>`;
+            htmlString += `<li>Position/hr: ${totalPosCntPh.toFixed(2)} <em>(Top: ${topPosNodeName} - ${maxPosCntPh.toFixed(2)})</em></li>`;
+            htmlString += '</ul>';
+
+            // --- Add SNR Stats to HTML ---
+            htmlString += '<h3>SNR Link Stats (Last 7 Days)</h3>';
+            if (countSnr > 0) {
+                htmlString += '<ul>';
+                htmlString += `<li>Total Links Logged: <strong>${countSnr}</strong></li>`;
+                htmlString += `<li>Average SNR: <strong>${avgSnr.toFixed(2)} dB</strong></li>`;
+                htmlString += `<li>Best Link: <strong>${maxSnr.toFixed(2)} dB</strong> <em>(${bestLinkName})</em></li>`;
+                htmlString += `<li>Worst Link: <strong>${minSnr.toFixed(2)} dB</strong> <em>(${worstLinkName})</em></li>`;
+                htmlString += '</ul>';
+                htmlString += '<h4 style="margin-bottom: 5px; margin-top: 15px;">Link Quality Distribution:</h4><ul>';
+                htmlString += `<li>Good (> 0 dB): <strong>${snrGood}</strong> <em>(${(snrGood / countSnr * 100).toFixed(1)}%)</em></li>`;
+                htmlString += `<li>Okay (0 to -5 dB): <strong>${snrOkay}</strong> <em>(${(snrOkay / countSnr * 100).toFixed(1)}%)</em></li>`;
+                htmlString += `<li>Weak (-5 to -10 dB): <strong>${snrWeak}</strong> <em>(${(snrWeak / countSnr * 100).toFixed(1)}%)</em></li>`;
+                htmlString += `<li>Bad (< -10 dB): <strong>${snrBad}</strong> <em>(${(snrBad / countSnr * 100).toFixed(1)}%)</em></li>`;
+                htmlString += '</ul>';
+            } else {
+                htmlString += '<p>No SNR data found in the last 14 days.</p>';
+            }
+            // --- END SNR HTML ---
+            
+            htmlString += '<h3>Averages (from online nodes)</h3><ul>';
+            htmlString += `<li>Avg. Battery: <strong>${avgBatteryLevel.toFixed(1)}%</strong> (from ${countBatteryNodes} nodes)</li>`;
+            htmlString += `<li>Avg. Uptime: <strong>${avgUptimeString}</strong> (from ${countUptimeNodes} nodes)</li>`;
+            htmlString += '</ul>';
+
+            htmlString += '<h3>Distribution by Role (all nodes)</h3><ul>';
+            for (const roleId in roleCounts) {
+                // Calculate and add percentage ---
+                const roleName = ROLE_MAP_LONG[roleId] || `Unknown (${roleId})`;
+                const count = roleCounts[roleId];
+                const percentage = (count / totalNodes) * 100;
+                htmlString += `<li>${roleName}: <strong>${count}</strong> <em>(${percentage.toFixed(1)}%)</em></li>`;
+            }
+            htmlString += '</ul>';
+
+            htmlString += '<h3>Distribution by Frequency (all nodes)</h3><ul>';
+            for (const freq in freqCounts) {
+                const freqName = (freq == "0") ? "Unknown" : `${freq} MHz`;
+                htmlString += `<li>${freqName}: <strong>${freqCounts[freq]}</strong></li>`;
+            }
+            htmlString += '</ul>';
+
+            statsContent.innerHTML = htmlString;
+        }
+
+        statsButton.addEventListener('click', () => {
+            calculateAndShowStats();
+            statsModal.style.display = 'block';
+        });
+
+        statsCloseBtn.addEventListener('click', () => {
+            statsModal.style.display = 'none';
+        });
+
+        window.addEventListener('click', (event) => {
+            if (event.target == statsModal) {
+                statsModal.style.display = 'none';
+            }
+        });
+        // --- END STATS MODAL JAVASCRIPT ---
+
+
         map.whenReady(() => {
             updateMapView();
             updateNodeListVisibility();
