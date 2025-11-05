@@ -122,7 +122,7 @@ class NodeDb {
         sqlite3_finalize(stmt);
     }
 
-    void setNodeTelemetryDevice(uint32_t nodeId, int batteryLevel, float voltage, uint32_t uptime) {
+    void setNodeTelemetryDevice(uint32_t nodeId, int batteryLevel, float voltage, uint32_t uptime, float chutil) {
         std::lock_guard<std::mutex> lock(mtx);
         if (!db) return;
         if (batteryLevel < 0 || batteryLevel > 101) {
@@ -130,12 +130,13 @@ class NodeDb {
         }
 
         sqlite3_stmt* stmt;
-        const char* sql = "UPDATE nodes SET battery_level = ?, battery_voltage = ?, uptime = ?, last_updated = CURRENT_TIMESTAMP WHERE node_id = ?";
+        const char* sql = "UPDATE nodes SET battery_level = ?, battery_voltage = ?, uptime = ?, chutil = ?, last_updated = CURRENT_TIMESTAMP WHERE node_id = ?";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, batteryLevel);
             sqlite3_bind_double(stmt, 2, voltage);
             sqlite3_bind_int(stmt, 3, uptime);
-            sqlite3_bind_int(stmt, 4, nodeId);
+            sqlite3_bind_double(stmt, 4, chutil);
+            sqlite3_bind_int(stmt, 5, nodeId);
 
             if (sqlite3_step(stmt) != SQLITE_DONE) {
                 std::cerr << "Error updating node battery level: " << sqlite3_errmsg(db) << std::endl;
@@ -168,7 +169,8 @@ class NodeDb {
     }
 
     void saveNodeSNR(uint32_t nodeId1, uint32_t nodeId2, float snr) {
-        if (nodeId1 == nodeId2) return;  // Skip exotic case
+        if (nodeId1 == nodeId2) return;                              // Skip exotic case
+        if (nodeId1 == 0xffffffff || nodeId2 == 0xffffffff) return;  // Skip broadcast case
         std::lock_guard<std::mutex> lock(mtx);
         if (!db) return;
         sqlite3_stmt* stmt;
@@ -212,16 +214,19 @@ class NodeDb {
         sqlite3_finalize(stmt);
     }
 
-    void saveGlobalStats(uint32_t allCnt, uint32_t decodedCnt, uint32_t handledCnt) {
+    void saveGlobalStats(uint32_t allCnt_868, uint32_t allCnt_433, uint32_t decodedCnt_868, uint32_t decodedCnt_433, uint32_t handledCnt_868, uint32_t handledCnt_433) {
         std::lock_guard<std::mutex> lock(mtx);
         if (!db) return;
 
         sqlite3_stmt* stmt;
-        const char* sql = "INSERT INTO mainstats (allcnt, decoded, handled) VALUES (?, ?, ?)";
+        const char* sql = "INSERT INTO mainstats (allcnt_868, allcnt_433, decoded_868, decoded_433, handled_868, handled_433) VALUES (?, ?, ?, ?, ?, ?)";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
-            sqlite3_bind_int(stmt, 1, allCnt);
-            sqlite3_bind_int(stmt, 2, decodedCnt);
-            sqlite3_bind_int(stmt, 3, handledCnt);
+            sqlite3_bind_int(stmt, 1, allCnt_868);
+            sqlite3_bind_int(stmt, 2, allCnt_433);
+            sqlite3_bind_int(stmt, 3, decodedCnt_868);
+            sqlite3_bind_int(stmt, 4, decodedCnt_433);
+            sqlite3_bind_int(stmt, 5, handledCnt_868);
+            sqlite3_bind_int(stmt, 6, handledCnt_433);
 
             if (sqlite3_step(stmt) != SQLITE_DONE) {
                 std::cerr << "Error inserting global stats: " << sqlite3_errmsg(db) << std::endl;
@@ -246,6 +251,7 @@ class NodeDb {
             "temperature REAL, "
             "battery_level INTEGER, "
             "battery_voltage REAL, "
+            "chutil REAL, "
             "freq INTEGER, "
             "role INTEGER, "
             "uptime INTEGER, sumcntph INTEGER DEFAULT 0, msgcntph INTEGER DEFAULT 0, tracecntph INTEGER DEFAULT 0, telemetrycntph INTEGER DEFAULT 0, nodeinfocntph INTEGER DEFAULT 0, poscntph INTEGER DEFAULT 0,"
@@ -266,7 +272,7 @@ class NodeDb {
             "last_updated TIMESTAMP DEFAULT (CURRENT_TIMESTAMP) );";
         const char* sql4 = "CREATE UNIQUE INDEX IF NOT EXISTS n1n2 ON snr ( node1, node2);";
 
-        const char* sql5 = "CREATE TABLE mainstats (    allcnt  INTEGER   DEFAULT (0),    decoded INTEGER   DEFAULT (0),    handled INTEGER   DEFAULT (0),    time    TIMESTAMP DEFAULT (CURRENT_TIMESTAMP) );";
+        const char* sql5 = "CREATE TABLE mainstats (    allcnt_868  INTEGER   DEFAULT (0),    allcnt_433  INTEGER   DEFAULT (0),    decoded_868 INTEGER   DEFAULT (0),    decoded_433 INTEGER   DEFAULT (0),    handled_868 INTEGER   DEFAULT (0),    handled_433 INTEGER   DEFAULT (0),    time    TIMESTAMP DEFAULT (CURRENT_TIMESTAMP) );";
         if (db) {
             char* errMsg = nullptr;
             if (sqlite3_exec(db, sql, nullptr, nullptr, &errMsg) != SQLITE_OK) {

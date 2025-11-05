@@ -194,7 +194,7 @@ void m_on_telemetry_device(MC_Header& header, MC_Telemetry_Device& telemetry) {
         return;
     }
     nodeNameMap.incrementTelemetryCount(header.srcnode);
-    nodeDb.setNodeTelemetryDevice(header.srcnode, telemetry.battery_level, telemetry.voltage, telemetry.has_uptime_seconds ? telemetry.uptime_seconds : 0);
+    nodeDb.setNodeTelemetryDevice(header.srcnode, telemetry.battery_level, telemetry.voltage, telemetry.has_uptime_seconds ? telemetry.uptime_seconds : 0, telemetry.has_channel_utilization ? telemetry.channel_utilization : 0);
     safe_printf("Telemetry Device from node 0x%08" PRIx32 ": Battery: %d, Uptime: %d, Voltage: %d, Channel Utilization: %d\n", header.srcnode, telemetry.battery_level, telemetry.uptime_seconds, telemetry.voltage, telemetry.channel_utilization);
 }
 void m_on_telemetry_environment(MC_Header& header, MC_Telemetry_Environment& telemetry) {
@@ -330,10 +330,13 @@ int main(int argc, char* argv[]) {
                     // safe_printf("Node 0x%08" PRIx32 ": %d messages\n", nodeId, msgCnt);
                     nodeDb.saveNodeMsgCnt(nodeId, msgCnt, traceCnt, telemetryCnt, nodeInfoCnt, posCnt);
                 });
-                uint32_t msgnum_all = mainClient.msgnum_all + localClient.msgnum_all;
-                uint32_t msgnum_decoded = mainClient.msgnum_decoded + localClient.msgnum_decoded;
-                uint32_t msgnum_handled = mainClient.msgnum_handled + localClient.msgnum_handled;
-                nodeDb.saveGlobalStats(msgnum_all, msgnum_decoded, msgnum_handled);
+                uint32_t msgnum_all_868 = mainClient.msgnum_all_868 + localClient.msgnum_all_868;
+                uint32_t msgnum_decoded_868 = mainClient.msgnum_decoded_868 + localClient.msgnum_decoded_868;
+                uint32_t msgnum_handled_868 = mainClient.msgnum_handled_868 + localClient.msgnum_handled_868;
+                uint32_t msgnum_all_433 = mainClient.msgnum_all_433 + localClient.msgnum_all_433;
+                uint32_t msgnum_decoded_433 = mainClient.msgnum_decoded_433 + localClient.msgnum_decoded_433;
+                uint32_t msgnum_handled_433 = mainClient.msgnum_handled_433 + localClient.msgnum_handled_433;
+                nodeDb.saveGlobalStats(msgnum_all_868, msgnum_all_433, msgnum_decoded_868, msgnum_decoded_433, msgnum_handled_868, msgnum_handled_433);
             }
             nodeNameMap.resetMessageCount();
             mainClient.resetStats();

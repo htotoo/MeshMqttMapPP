@@ -78,13 +78,19 @@ class MeshMqttClient {
     void addTopic(std::string topic) { topicList.push_back(topic); }
 
     void resetStats() {
-        msgnum_all = 0;
-        msgnum_decoded = 0;
-        msgnum_handled = 0;
+        msgnum_all_868 = 0;
+        msgnum_decoded_868 = 0;
+        msgnum_handled_868 = 0;
+        msgnum_all_433 = 0;
+        msgnum_decoded_433 = 0;
+        msgnum_handled_433 = 0;
     }
-    uint32_t msgnum_all = 0;
-    uint32_t msgnum_decoded = 0;
-    uint32_t msgnum_handled = 0;
+    uint32_t msgnum_all_868 = 0;
+    uint32_t msgnum_decoded_868 = 0;
+    uint32_t msgnum_handled_868 = 0;
+    uint32_t msgnum_all_433 = 0;
+    uint32_t msgnum_decoded_433 = 0;
+    uint32_t msgnum_handled_433 = 0;
 
    private:
     MQTTClient client;
