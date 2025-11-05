@@ -10,7 +10,7 @@ $db_path = '/home/totoo/projects/meshlogger/build/nodes.db';
 $nodes = [];
 $snr_data = [];
 $chat_messages = [];
-$main_stats = []; // Initialize array for new stats
+$main_stats = [];
 $node_count = 0;
 
 $sort_by = $_GET['sort'] ?? 'last_updated';
@@ -22,6 +22,7 @@ if ($sort_by === 'msgcntph') {
     $order_by_sql = 'ORDER BY sumcntph DESC';
 }
 
+$isDebug = (isset($_REQUEST["debug"]) && $_REQUEST["debug"] == 1);
 
 try {
     $db = new PDO('sqlite:' . $db_path);
@@ -29,7 +30,7 @@ try {
     $db->setAttribute(PDO::ATTR_TIMEOUT, 5);
 
     $node_map = [];
-    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role, battery_voltage, uptime, msgcntph, tracecntph, telemetrycntph, nodeinfocntph, poscntph, sumcntph FROM nodes ' . $order_by_sql);
+    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role, battery_voltage, uptime, msgcntph, tracecntph, telemetrycntph, nodeinfocntph, poscntph, sumcntph, chutil FROM nodes ' . $order_by_sql);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as $row) {
         $hex = sprintf('%x', $row['node_id']);
@@ -67,6 +68,7 @@ try {
             'nodeinfocntph' => $row['nodeinfocntph'] ?? 0,
             'poscntph' => $row['poscntph'] ?? 0,
             'sumcntph' => $row['sumcntph'] ?? 0,
+            'chutil' => (float)($row['chutil'] ?? 0.0),
             'is_stale' => $is_stale
         ];
         $nodes[] = $node_data;
@@ -121,6 +123,9 @@ try {
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
 
+    <?php if ($isDebug): ?>
+    <!-- This script will be loaded at the end of the body -->
+    <?php endif; ?>
 
     <style>
         body, html {
@@ -179,12 +184,11 @@ try {
             font-weight: bold;
             text-align: center;
             flex-shrink: 0;
-            display: flex; /* Added for alignment */
-            justify-content: center; /* Added for alignment */
-            align-items: center; /* Added for alignment */
-            gap: 10px; /* Added for spacing */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
         }
-        /* --- MODIFIED: Changed ID selector to Class selector --- */
         .stats-button {
             font-size: 0.8em;
             font-weight: normal;
@@ -192,7 +196,6 @@ try {
             color: #007bff;
             text-decoration: underline;
         }
-        /* --- END MODIFIED --- */
         #filter-container {
             padding: 10px 10px 5px 10px;
             background-color: #e9ecef;
@@ -270,6 +273,7 @@ try {
             display: flex;
             align-items: center;
             gap: 12px;
+            flex-wrap: wrap;
         }
         .node-stats span {
             display: inline-flex;
@@ -358,7 +362,6 @@ try {
             padding-right: 5px;
         }
         
-        /* --- MODAL STYLES --- */
         #stats-modal {
             display: none;
             position: fixed;
@@ -373,7 +376,7 @@ try {
         .modal-content {
 			background-color: #fefefe;
 			color: #333;
-			margin: 5vh auto; /* Changed to vh for better vertical centering */
+			margin: 5vh auto;
 			padding: 20px;
 			border: 1px solid #888;
 			width: 90%;
@@ -401,7 +404,6 @@ try {
         .modal-content li {
             margin-bottom: 5px;
         }
-        /* --- Style for stats table --- */
         .modal-content table {
             width: 100%; 
             border-collapse: collapse; 
@@ -432,8 +434,6 @@ try {
             text-decoration: none;
             cursor: pointer;
         }
-        /* --- END MODAL STYLES --- */
-
 
         @media (max-width: 768px) {
             #node-list-panel {
@@ -504,6 +504,13 @@ try {
                   <input type="checkbox" id="freq-868-toggle" checked />
                   <label for="freq-868-toggle">Show 868 MHz</label>
                 </div>
+                <?php if ($isDebug): ?>
+                <hr style="border-top: 1px solid #ccc; margin: 4px 0;">
+                <div>
+                  <input type="checkbox" id="heatmap-toggle" />
+                  <label for="heatmap-toggle">Show Heatmap</label>
+                </div>
+                <?php endif; ?>
             </div>
         </div>
         <div id="bottom-panel">
@@ -543,8 +550,13 @@ try {
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <?php if ($isDebug): ?>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js" xintegrity="sha512-VGYlKYwL1+PhdC99/sLCg/L/bQoHl/ZfG9f06se2K1L/S/iZCI5D/hqaR0R7e1A/ImvjG0qf/M/o/P5aQvMvA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <?php endif; ?>
 
     <script>
+        const isDebug = <?php echo json_encode($isDebug); ?>;
+    
         function timeAgo(timestamp) {
             if (!timestamp) return 'Soha';
             const ago = new Date(timestamp + ' UTC');
@@ -596,6 +608,7 @@ try {
         const filterByMapViewToggle = document.getElementById('filter-by-map-view-toggle');
         const freq433Toggle = document.getElementById('freq-433-toggle');
         const freq868Toggle = document.getElementById('freq-868-toggle');
+        const heatmapToggle = isDebug ? document.getElementById('heatmap-toggle') : null;
 
         const map = L.map(mapElement).setView([47.4979, 19.0402], 7);
 
@@ -626,7 +639,6 @@ try {
 
         const nodes = <?php echo json_encode($nodes); ?>;
         const snrData = <?php echo json_encode($snr_data); ?>;
-        // --- Get mainStats data ---
         const mainStats = <?php echo json_encode($main_stats); ?>;
         const markerLayer = {};
         const individualMarkerLayer = {};
@@ -671,6 +683,7 @@ try {
         
         
         const snrLayer = L.layerGroup();
+        let chutilHeatLayer = null;
 
 
         panelToggleBtn.parentElement.addEventListener('click', () => {
@@ -679,17 +692,15 @@ try {
             setTimeout(() => map.invalidateSize(), 300);
         });
 
-        chatHeader.addEventListener('click', () => {
-            const isCollapsed = bottomPanel.classList.toggle('collapsed');
-            chatToggleBtn.innerHTML = isCollapsed ? '▲' : '▼';
-            setTimeout(() => map.invalidateSize(), 300);
-        });
+        let selectedNodeIdForSnr = null; // Store the currently selected node ID
 
         function generatePopupContent(node) {
             const url = new URL(window.location);
             url.searchParams.set('node', node.node_id);
             history.replaceState({ nodeId: node.node_id }, '', url.toString());
 			
+            selectedNodeIdForSnr = node.node_id; // Set the selected node
+
             const roleText = ROLE_MAP_LONG[node.role] || 'Unknown';
             let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}.<br>Cnt:${node.sumcntph} (Msg:${node.msgcntph}, Trc:${node.tracecntph}, Tel:${node.telemetrycntph}, NI:${node.nodeinfocntph}, Pos:${node.poscntph})`;
             
@@ -714,6 +725,9 @@ try {
             const temp = parseFloat(node.temperature);
             if (temp !== 0) {
                 content += `<br>🌡️ ${temp.toFixed(1)}°C`;
+            }
+            if (node.chutil > 0) {
+                content += `<br>📊 Channel Util: ${node.chutil.toFixed(1)}%`;
             }
 
             if (snrToggle.checked || 1) {
@@ -800,6 +814,9 @@ try {
                 if (temp !== 0) {
                     statsHtml += `<span>🌡️ ${temp.toFixed(1)}°C</span>`;
                 }
+                if (node.chutil > 0) {
+                    statsHtml += `<span>📊 ${node.chutil.toFixed(1)}%</span>`;
+                }
 
                 nodeItem.innerHTML = `
                     <div>
@@ -873,10 +890,27 @@ try {
         }
         
         let isPopupOpen = false;
-        map.on('popupopen', () => { isPopupOpen = true; });
+        map.on('popupopen', () => { 
+            isPopupOpen = true; 
+            // When popup opens, if SNR is on, draw lines for this new node
+            if (snrToggle.checked) {
+                drawSnrLines(selectedNodeIdForSnr);
+            }
+        });
 
         map.on('popupclose', () => {
             isPopupOpen = false;
+            selectedNodeIdForSnr = null; // Clear the selected node
+
+            // If SNR is active, we must redraw (to clear the lines)
+            if (snrToggle.checked) {
+                drawSnrLines(selectedNodeIdForSnr);
+            }
+
+            // Clear the URL parameter
+            const url = new URL(window.location);
+            url.searchParams.delete('node');
+            history.replaceState(null, '', url.toString());
         });
         
         function openNodePopup(nodeId) {
@@ -919,8 +953,14 @@ try {
             return `rgb(${Math.round(red)}, ${Math.round(green)}, 0)`;
         }
 
-        function drawSnrLines() {
+        function drawSnrLines(selectedNodeId) {
             snrLayer.clearLayers();
+
+            // If no node is selected, don't draw any lines
+            if (!selectedNodeId) {
+                return;
+            }
+
             const processedPairs = new Set();
             const nodesById = Object.fromEntries(nodes.map(n => [n.node_id, n]));
             
@@ -929,6 +969,11 @@ try {
             const hideStale = hideStaleToggle.checked;
 
             snrData.forEach(link => {
+                // FILTER: Only draw if node1 or node2 matches the selected node
+                if (link.node1 !== selectedNodeId && link.node2 !== selectedNodeId) {
+                    return;
+                }
+
                 const pairKeyFwd = `${link.node1}-${link.node2}`;
                 const pairKeyRev = `${link.node2}-${link.node1}`;
 
@@ -990,17 +1035,81 @@ try {
             });
         }
         
+        function updateHeatmapLayer() {
+            if (!isDebug) return;
+
+            if (chutilHeatLayer && map.hasLayer(chutilHeatLayer)) {
+                map.removeLayer(chutilHeatLayer);
+                chutilHeatLayer = null;
+            }
+
+            const showHeatmap = heatmapToggle.checked;
+            if (!showHeatmap) return;
+
+            const heatData = [];
+            const show433 = freq433Toggle.checked;
+            const show868 = freq868Toggle.checked;
+            const hideStale = hideStaleToggle.checked;
+            
+            nodes.forEach(node => {
+                const matchesFreq = !( (!show433 && node.freq == 433) || (!show868 && node.freq == 868) );
+                const matchesStale = !hideStale || !node.is_stale;
+
+                if (matchesFreq && matchesStale && (node.latitude !== 0 || node.longitude !== 0)) {
+                    if (node.chutil > 0) {
+                        heatData.push([node.latitude, node.longitude, node.chutil / 100.0]); 
+                    }
+                }
+            });
+            
+            if (heatData.length > 0) {
+                
+                const currentZoom = map.getZoom();
+                const minZoom = 7;
+                const maxZoom = 18;
+                const minMaxVal = 1.0;
+                const maxMaxVal = 10.0;
+                
+                let dynamicMax;
+                if (currentZoom <= minZoom) {
+                    dynamicMax = maxMaxVal;
+                } else if (currentZoom >= maxZoom) {
+                    dynamicMax = minMaxVal;
+                } else {
+                    const zoomRange = maxZoom - minZoom;
+                    const maxRange = maxMaxVal - minMaxVal;
+                    const zoomProgress = (currentZoom - minZoom) / zoomRange; 
+                    dynamicMax = maxMaxVal - (zoomProgress * maxRange);
+                }
+
+                chutilHeatLayer = L.heatLayer(heatData, {
+                    radius: 90,
+                    blur: 15,
+                    max: dynamicMax,
+					maxZoom: 18,
+					minOpacity: 0.1,
+                    opacity: 1,
+                    gradient: {
+                        0.0: 'blue',
+                        0.2: 'green',
+                        0.4: 'red'
+                    }
+                });
+                map.addLayer(chutilHeatLayer);
+            }
+        }
+
         function updateMapView() {
             const showSnr = snrToggle.checked;
             const hideStale = hideStaleToggle.checked;
             const show433 = freq433Toggle.checked;
             const show868 = freq868Toggle.checked;
+
             [allMarkersCluster, allIndividualMarkersLayer, snrLayer].forEach(layer => {
                 if (map.hasLayer(layer)) map.removeLayer(layer);
                 layer.clearLayers();
             });
 
-            
             nodes.forEach(node => {
                 const matchesFreq = !( (!show433 && node.freq == 433) || (!show868 && node.freq == 868) );
                 const matchesStale = !hideStale || !node.is_stale;
@@ -1015,13 +1124,16 @@ try {
                 }
             });
 
-            // Add the appropriate layers back to the map
             if (showSnr) {
                 map.addLayer(allIndividualMarkersLayer);
-                drawSnrLines();
+                drawSnrLines(selectedNodeIdForSnr);
                 map.addLayer(snrLayer);
             } else {
                 map.addLayer(allMarkersCluster);
+            }
+            
+            if (isDebug) {
+                updateHeatmapLayer();
             }
         }
 
@@ -1035,14 +1147,20 @@ try {
         hideStaleToggle.addEventListener('change', onFilterChange);
         freq433Toggle.addEventListener('change', onFilterChange);
         freq868Toggle.addEventListener('change', onFilterChange);
+        if (isDebug && heatmapToggle) {
+            heatmapToggle.addEventListener('change', onFilterChange);
+        }
 
         map.on('zoomend', function() {
             if (snrToggle.checked) {
-                drawSnrLines();
+                drawSnrLines(selectedNodeIdForSnr);
+            }
+            
+            if (isDebug) {
+                updateHeatmapLayer();
             }
         });
         
-        // --- STATS MODAL JAVASCRIPT ---
         const statsModal = document.getElementById('stats-modal');
         const statsButton433 = document.getElementById('stats-button-433');
         const statsButton868 = document.getElementById('stats-button-868');
@@ -1050,15 +1168,13 @@ try {
         const statsContent = document.getElementById('stats-content');
 
 function calculateAndShowStats(frequencyFilter) {
-            let htmlString = ''; // Start with an empty string
+            let htmlString = '';
 
-            // --- Set Modal Title ---
             const modalTitle = statsModal.querySelector('h2');
             if (modalTitle) {
                 modalTitle.textContent = `Mesh Statistics (${frequencyFilter} MHz)`;
             }
 
-            // --- Display mainStats from the new table ---
             htmlString += `<h3>Recent Mesh Activity (${frequencyFilter} MHz)</h3>`;
             if (mainStats && mainStats.length > 0) {
                 htmlString += '<table>';
@@ -1092,7 +1208,6 @@ function calculateAndShowStats(frequencyFilter) {
                 return;
             }
             
-            // --- Filter nodes by the selected frequency ---
             const filteredNodes = nodes.filter(node => node.freq == frequencyFilter);
             
             if (!filteredNodes || filteredNodes.length === 0) {
@@ -1113,7 +1228,7 @@ function calculateAndShowStats(frequencyFilter) {
                 return name !== 'N/A' ? name : node.node_id_hex;
             };
 
-            let totalNodes = filteredNodes.length; // Use filtered length
+            let totalNodes = filteredNodes.length;
             let nodesWithCoords = 0;
             let staleNodes = 0;
             let onlineNodes = 0;
@@ -1129,10 +1244,11 @@ function calculateAndShowStats(frequencyFilter) {
             let countBatteryNodes = 0;
             let sumUptime = 0;
             let countUptimeNodes = 0;
+            let sumChutil = 0;
+            let countChutilNodes = 0;
             
             let roleCounts = {};
 
-            // --- Variables to track top senders ---
             let maxMsgCntPh = 0;
             let topMsgNodeName = 'N/A';
             let maxTraceCntPh = 0;
@@ -1143,8 +1259,9 @@ function calculateAndShowStats(frequencyFilter) {
             let topNodeInfoNodeName = 'N/A';
             let maxPosCntPh = 0;
             let topPosNodeName = 'N/A';
+            let maxChutil = 0;
+            let topChutilNodeName = 'N/A';
 
-            // --- Loop over FILTERED nodes ---
             filteredNodes.forEach(node => {
                 if (node.latitude !== 0 || node.longitude !== 0) nodesWithCoords++;
                 if (node.is_stale) {
@@ -1157,6 +1274,7 @@ function calculateAndShowStats(frequencyFilter) {
                     const nodeTelemetryCnt = parseFloat(node.telemetrycntph) || 0;
                     const nodeNodeInfoCnt = parseFloat(node.nodeinfocntph) || 0;
                     const nodePosCnt = parseFloat(node.poscntph) || 0;
+                    const nodeChutil = parseFloat(node.chutil) || 0;
 
                     totalSumCntPh += nodeSumCnt;
                     totalMsgCntPh += nodeMsgCnt;
@@ -1173,8 +1291,11 @@ function calculateAndShowStats(frequencyFilter) {
                         sumUptime += parseFloat(node.uptime) || 0;
                         countUptimeNodes++;
                     }
+                    if (nodeChutil > 0) {
+                        sumChutil += nodeChutil;
+                        countChutilNodes++;
+                    }
 
-                    // --- Check for top senders ---
                     const nodeDisplayName = node.short_name !== 'N/A' ? node.short_name : node.long_name;
                     
                     if (nodeMsgCnt > maxMsgCntPh) {
@@ -1197,21 +1318,22 @@ function calculateAndShowStats(frequencyFilter) {
                         maxPosCntPh = nodePosCnt;
                         topPosNodeName = nodeDisplayName;
                     }
+                    if (nodeChutil > maxChutil) {
+                        maxChutil = nodeChutil;
+                        topChutilNodeName = nodeDisplayName;
+                    }
                 }
 
-                // Count all nodes for distribution
                 roleCounts[node.role] = (roleCounts[node.role] || 0) + 1;
-                // freqCounts[node.freq] = (freqCounts[node.freq] || 0) + 1; // No longer needed
             });
 
-            // --- Calculate Msgs/sec ---
-            const totalSumCntPs = totalSumCntPh / 3600; // 60 min * 60 sec
+            const totalSumCntPs = totalSumCntPh / 3600;
 
             const avgBatteryLevel = (countBatteryNodes > 0) ? (sumBattery / countBatteryNodes) : 0;
             const avgUptimeSeconds = (countUptimeNodes > 0) ? (sumUptime / countUptimeNodes) : 0;
             const avgUptimeString = formatUptime(avgUptimeSeconds) || 'N/A';
+            const avgChutil = (countChutilNodes > 0) ? (sumChutil / countChutilNodes) : 0;
 
-            // --- Calculate SNR Stats ---
             let sumSnr = 0;
             let countSnr = 0;
             let minSnr = 999;
@@ -1221,23 +1343,21 @@ function calculateAndShowStats(frequencyFilter) {
             let maxSnrNode1Id = null;
             let maxSnrNode2Id = null;
             
-            let snrGood = 0; // > 0
-            let snrOkay = 0; // 0 to -5
-            let snrWeak = 0; // -5 to -10
-            let snrBad = 0;  // < -10
+            let snrGood = 0;
+            let snrOkay = 0;
+            let snrWeak = 0;
+            let snrBad = 0;
             
-            // --- Get set of filtered node IDs for SNR check ---
             const filteredNodeIds = new Set(filteredNodes.map(n => n.node_id));
 
             if (snrData && snrData.length > 0) {
                 snrData.forEach(link => {
-                    // --- Only count links where BOTH nodes are in the filtered frequency set ---
                     if (!filteredNodeIds.has(link.node1) || !filteredNodeIds.has(link.node2)) {
-                        return; // Skip this link
+                        return;
                     }
                     
                     const snr = parseFloat(link.snr);
-                    if (snr === 0) return; // Should be filtered by SQL, but safe to check
+                    if (snr === 0) return;
 
                     sumSnr += snr;
                     countSnr++;
@@ -1274,9 +1394,7 @@ function calculateAndShowStats(frequencyFilter) {
             if (minSnrNode1Id) {
                 worstLinkName = `${getNodeName(minSnrNode1Id)} → ${getNodeName(minSnrNode2Id)}`;
             }
-            // --- END SNR CALC ---
             
-            // --- Build HTML (append to htmlString) ---
             htmlString += '<h3>Node Status</h3><ul>';
             htmlString += `<li>Total Nodes (${frequencyFilter} MHz): <strong>${totalNodes}</strong></li>`;
             htmlString += `<li>Online Nodes: <strong>${onlineNodes}</strong></li>`;
@@ -1304,7 +1422,6 @@ function calculateAndShowStats(frequencyFilter) {
             htmlString += `<li>Position/hr: ${totalPosCntPh.toFixed(0)} <em>(Top: ${topPosNodeName} - ${maxPosCntPh.toFixed(0)})</em></li>`;
             htmlString += '</ul>';
 
-            // --- Add SNR Stats to HTML ---
             htmlString += `<h3>SNR Link Stats (Last 7 Days, ${frequencyFilter} MHz only)</h3>`;
             if (countSnr > 0) {
                 htmlString += '<ul>';
@@ -1322,16 +1439,20 @@ function calculateAndShowStats(frequencyFilter) {
             } else {
                 htmlString += `<p>No SNR data found for ${frequencyFilter} MHz links in the last 7 days.</p>`;
             }
-            // --- END SNR HTML ---
             
             htmlString += '<h3>Averages (from online nodes)</h3><ul>';
             htmlString += `<li>Avg. Battery: <strong>${avgBatteryLevel.toFixed(1)}%</strong> (from ${countBatteryNodes} nodes)</li>`;
             htmlString += `<li>Avg. Uptime: <strong>${avgUptimeString}</strong> (from ${countUptimeNodes} nodes)</li>`;
+            if (countChutilNodes > 0) {
+                htmlString += `<li>Avg. Channel Util: <strong>${avgChutil.toFixed(1)}%</strong> (from ${countChutilNodes} nodes)</li>`;
+                htmlString += `<li>Max. Channel Util: <strong>${maxChutil.toFixed(1)}%</strong> <em>(${topChutilNodeName})</em></li>`;
+            } else {
+                htmlString += `<li>Avg. Channel Util: <strong>N/A</strong></li>`;
+            }
             htmlString += '</ul>';
 
             htmlString += `<h3>Distribution by Role (${frequencyFilter} MHz nodes)</h3><ul>`;
             for (const roleId in roleCounts) {
-                // Calculate and add percentage ---
                 const roleName = ROLE_MAP_LONG[roleId] || `Unknown (${roleId})`;
                 const count = roleCounts[roleId];
                 const percentage = (count / totalNodes) * 100;
@@ -1342,15 +1463,14 @@ function calculateAndShowStats(frequencyFilter) {
             statsContent.innerHTML = htmlString;
         }
         statsButton433.addEventListener('click', () => {
-            calculateAndShowStats('433'); // Pass '433'
+            calculateAndShowStats('433');
             statsModal.style.display = 'block';
         });
 
         statsButton868.addEventListener('click', () => {
-            calculateAndShowStats('868'); // Pass '868'
+            calculateAndShowStats('868');
             statsModal.style.display = 'block';
         });
-        // --- END MODIFIED ---
 
         statsCloseBtn.addEventListener('click', () => {
             statsModal.style.display = 'none';
@@ -1361,7 +1481,6 @@ function calculateAndShowStats(frequencyFilter) {
                 statsModal.style.display = 'none';
             }
         });
-        // --- END STATS MODAL JAVASCRIPT ---
 
 
         map.whenReady(() => {

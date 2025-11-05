@@ -225,7 +225,7 @@ void m_on_traceroute(MC_Header& header, MC_RouteDiscovery& route, bool for_me, b
         n1 = route.route[i];
     }
     if (route.route_back_count > 0) {
-        nodeDb.saveNodeSNR(n1, header.srcnode, route.snr_towards[route.route_count + 1]);
+        // nodeDb.saveNodeSNR(n1, header.srcnode, route.snr_towards[route.route_count + 1]);
     }
     n1 = (route.route_back_count > 0) ? header.srcnode : header.dstnode;
     for (int i = 0; i < route.route_back_count; i++) {
