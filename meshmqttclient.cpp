@@ -181,9 +181,9 @@ int MeshMqttClient::messageArrived(void* context, char* topicName, int topicLen,
         freq = 433;
     }
     MeshMqttClient* client = static_cast<MeshMqttClient*>(context);
-    safe_printf("topic: %s\n", topicName);
+    // safe_printf("topic: %s\n", topicName);
     client->ProcessPacket(static_cast<uint8_t*>(message->payload), message->payloadlen, freq);
-    safe_printf("\n");
+    // safe_printf("\n");
     MQTTClient_freeMessage(&message);
     MQTTClient_free(topicName);
     return 1;
@@ -380,7 +380,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
             pb_release(&meshtastic_ServiceEnvelope_msg, &serviceEnv);
             return -1;  // decoding failed
         }
-        safe_printf("msgId: %d\r\n", serviceEnv.packet->id);
+        // safe_printf("msgId: %d\r\n", serviceEnv.packet->id);
         /* safe_printf("serviceEnv.channel_id: %s\r\n", serviceEnv.channel_id);
          safe_printf("serviceEnv.gateway_id: %s\r\n", serviceEnv.gateway_id);
 

@@ -103,10 +103,8 @@ try {
         ];
     }
 
-    // --- MODIFIED: Query mainstats table (LIMIT 5) ---
-    $stats_stmt = $db->query("SELECT allcnt, decoded, handled, time FROM mainstats ORDER BY time DESC LIMIT 5");
+    $stats_stmt = $db->query("SELECT allcnt_868, allcnt_433, decoded_868, decoded_433, handled_868, handled_433, time FROM mainstats ORDER BY time DESC LIMIT 5");
     $main_stats = $stats_stmt->fetchAll(PDO::FETCH_ASSOC);
-    // --- END MODIFIED ---
 
 } catch (PDOException $e) {
     die("Database Error: " . $e->getMessage());
@@ -186,13 +184,15 @@ try {
             align-items: center; /* Added for alignment */
             gap: 10px; /* Added for spacing */
         }
-        #stats-button {
+        /* --- MODIFIED: Changed ID selector to Class selector --- */
+        .stats-button {
             font-size: 0.8em;
             font-weight: normal;
             cursor: pointer;
             color: #007bff;
             text-decoration: underline;
         }
+        /* --- END MODIFIED --- */
         #filter-container {
             padding: 10px 10px 5px 10px;
             background-color: #e9ecef;
@@ -464,8 +464,9 @@ try {
                 <div id="panel-header">
                     <span><a href="/">🏡</a></span>
                     <span>All Nodes (<?php echo $node_count; ?>)</span>
-                    <span id="stats-button">[Stats]</span>
-                </div>
+                    <span id="stats-button-433" class="stats-button">[433 Stats]</span>
+                    <span id="stats-button-868" class="stats-button">[868 Stats]</span>
+                    </div>
                 <div id="filter-container">
                     <input type="text" id="node-filter-input" placeholder="Filter by name or ID...">
                 </div>
@@ -507,7 +508,7 @@ try {
         </div>
         <div id="bottom-panel">
             <div id="chat-header">
-                <span>Chat / Log (<a href="https://t.me/+z2Yk9z31vDkyMzA8" onclick="event.stopPropagation();" class="chat-title-link" target="_blank" >Telegram csatorna</a>)</span>
+                <span>Chat / Log (<a href="https://discord.gg/T22ws9yw" onclick="event.stopPropagation();" class="chat-title-link" target="_blank" >Discord csatorna</a>)</span>
                 <span id="chat-toggle-btn">▼</span>
             </div>
             <div id="chat-content">
@@ -1043,41 +1044,59 @@ try {
         
         // --- STATS MODAL JAVASCRIPT ---
         const statsModal = document.getElementById('stats-modal');
-        const statsButton = document.getElementById('stats-button');
+        const statsButton433 = document.getElementById('stats-button-433');
+        const statsButton868 = document.getElementById('stats-button-868');
         const statsCloseBtn = statsModal.querySelector('.close-btn');
         const statsContent = document.getElementById('stats-content');
 
-// --- MODIFIED: calculateAndShowStats ---
-function calculateAndShowStats() {
+function calculateAndShowStats(frequencyFilter) {
             let htmlString = ''; // Start with an empty string
 
+            // --- Set Modal Title ---
+            const modalTitle = statsModal.querySelector('h2');
+            if (modalTitle) {
+                modalTitle.textContent = `Mesh Statistics (${frequencyFilter} MHz)`;
+            }
+
             // --- Display mainStats from the new table ---
-            htmlString += '<h3>Recent Mesh Activity</h3>';
+            htmlString += `<h3>Recent Mesh Activity (${frequencyFilter} MHz)</h3>`;
             if (mainStats && mainStats.length > 0) {
                 htmlString += '<table>';
-                htmlString += '<thead><tr><th>Time (UTC)</th><th>All Pkts</th><th>Decoded</th><th>Handled</th></tr></thead>';
+                
+                const allCntKey = `allcnt_${frequencyFilter}`;
+                const decodedKey = `decoded_${frequencyFilter}`;
+                const handledKey = `handled_${frequencyFilter}`;
+                
+                htmlString += `<thead><tr><th>Time (UTC)</th><th>All Pkts (${frequencyFilter})</th><th>Decoded (${frequencyFilter})</th><th>Handled (${frequencyFilter})</th></tr></thead>`;
                 htmlString += '<tbody>';
                 
                 mainStats.forEach(stat => {
                     htmlString += '<tr>';
                     htmlString += `<td><small>${stat.time}</small></td>`;
-                    htmlString += `<td>${stat.allcnt}</td>`;
-                    htmlString += `<td>${stat.decoded}</td>`;
-                    htmlString += `<td>${stat.handled}</td>`;
+                    htmlString += `<td>${stat[allCntKey] || 0}</td>`; 
+                    htmlString += `<td>${stat[decodedKey] || 0}</td>`;
+                    htmlString += `<td>${stat[handledKey] || 0}</td>`;
                     htmlString += '</tr>';
                 });
 
                 htmlString += '</tbody></table>';
-                // --- NEW: Add timestamp below table ---
                 htmlString += `<p style="font-size: 0.9em; color: #555; margin: 5px 0 0 0;">Latest data from: <strong>${mainStats[0].time} UTC</strong></p>`;
             } else {
                 htmlString += '<p>No recent mesh activity stats found.</p>';
             }
-            // --- END NEW ---
 
 
             if (!nodes || nodes.length === 0) {
                 htmlString += '<p style="margin-top: 20px;">No node data to analyze.</p>';
+                statsContent.innerHTML = htmlString;
+                return;
+            }
+            
+            // --- Filter nodes by the selected frequency ---
+            const filteredNodes = nodes.filter(node => node.freq == frequencyFilter);
+            
+            if (!filteredNodes || filteredNodes.length === 0) {
+                htmlString += `<p style="margin-top: 20px;">No node data to analyze for ${frequencyFilter} MHz.</p>`;
                 statsContent.innerHTML = htmlString;
                 return;
             }
@@ -1094,7 +1113,7 @@ function calculateAndShowStats() {
                 return name !== 'N/A' ? name : node.node_id_hex;
             };
 
-            let totalNodes = nodes.length; 
+            let totalNodes = filteredNodes.length; // Use filtered length
             let nodesWithCoords = 0;
             let staleNodes = 0;
             let onlineNodes = 0;
@@ -1112,7 +1131,6 @@ function calculateAndShowStats() {
             let countUptimeNodes = 0;
             
             let roleCounts = {};
-            let freqCounts = {};
 
             // --- Variables to track top senders ---
             let maxMsgCntPh = 0;
@@ -1126,7 +1144,8 @@ function calculateAndShowStats() {
             let maxPosCntPh = 0;
             let topPosNodeName = 'N/A';
 
-            nodes.forEach(node => {
+            // --- Loop over FILTERED nodes ---
+            filteredNodes.forEach(node => {
                 if (node.latitude !== 0 || node.longitude !== 0) nodesWithCoords++;
                 if (node.is_stale) {
                     staleNodes++;
@@ -1182,7 +1201,7 @@ function calculateAndShowStats() {
 
                 // Count all nodes for distribution
                 roleCounts[node.role] = (roleCounts[node.role] || 0) + 1;
-                freqCounts[node.freq] = (freqCounts[node.freq] || 0) + 1;
+                // freqCounts[node.freq] = (freqCounts[node.freq] || 0) + 1; // No longer needed
             });
 
             // --- Calculate Msgs/sec ---
@@ -1206,9 +1225,17 @@ function calculateAndShowStats() {
             let snrOkay = 0; // 0 to -5
             let snrWeak = 0; // -5 to -10
             let snrBad = 0;  // < -10
+            
+            // --- Get set of filtered node IDs for SNR check ---
+            const filteredNodeIds = new Set(filteredNodes.map(n => n.node_id));
 
             if (snrData && snrData.length > 0) {
                 snrData.forEach(link => {
+                    // --- Only count links where BOTH nodes are in the filtered frequency set ---
+                    if (!filteredNodeIds.has(link.node1) || !filteredNodeIds.has(link.node2)) {
+                        return; // Skip this link
+                    }
+                    
                     const snr = parseFloat(link.snr);
                     if (snr === 0) return; // Should be filtered by SQL, but safe to check
 
@@ -1251,19 +1278,17 @@ function calculateAndShowStats() {
             
             // --- Build HTML (append to htmlString) ---
             htmlString += '<h3>Node Status</h3><ul>';
-            htmlString += `<li>Total Nodes: <strong>${totalNodes}</strong></li>`;
+            htmlString += `<li>Total Nodes (${frequencyFilter} MHz): <strong>${totalNodes}</strong></li>`;
             htmlString += `<li>Online Nodes: <strong>${onlineNodes}</strong></li>`;
             htmlString += `<li>Stale Nodes: <strong>${staleNodes}</strong></li>`;
             htmlString += `<li>Nodes with GPS: <strong>${nodesWithCoords}</strong></li>`;
             htmlString += '</ul>';
 
-            // --- MODIFIED: Removed "(from online nodes)" ---
-            htmlString += '<h3>Message Counts</h3><ul>';
+            htmlString += '<h3>Message Counts (from online nodes)</h3><ul>';
             htmlString += `<li><strong>Total All Msgs/hr: ${totalSumCntPh.toFixed(2)}</strong> <em>(${totalSumCntPs.toFixed(4)} msgs/sec)</em></li>`;
 
-            // --- NEW: Add Ratio ---
             if (mainStats && mainStats.length > 0) {
-                const newestAllPkts = parseFloat(mainStats[0].allcnt) || 0;
+                const newestAllPkts = parseFloat(mainStats[0][`allcnt_${frequencyFilter}`]) || 0;
                 if (newestAllPkts > 0) {
                     const ratio = newestAllPkts / totalSumCntPh;
                     htmlString += `<li>All packets / sent packets (avg repeat count): <strong>${ratio.toFixed(2)}</strong></li>`;
@@ -1271,7 +1296,6 @@ function calculateAndShowStats() {
                     htmlString += `<li>All packets / sent packets (avg repeat count): <strong>N/A</strong> <em>(Newest Pkts is 0)</em></li>`;
                 }
             }
-            // --- END NEW ---
 
             htmlString += `<li>Text Msgs/hr: ${totalMsgCntPh.toFixed(0)} <em>(Top: ${topMsgNodeName} - ${maxMsgCntPh.toFixed(0)})</em></li>`;
             htmlString += `<li>Traceroute/hr: ${totalTraceCntPh.toFixed(0)} <em>(Top: ${topTraceNodeName} - ${maxTraceCntPh.toFixed(0)})</em></li>`;
@@ -1281,7 +1305,7 @@ function calculateAndShowStats() {
             htmlString += '</ul>';
 
             // --- Add SNR Stats to HTML ---
-            htmlString += '<h3>SNR Link Stats (Last 7 Days)</h3>';
+            htmlString += `<h3>SNR Link Stats (Last 7 Days, ${frequencyFilter} MHz only)</h3>`;
             if (countSnr > 0) {
                 htmlString += '<ul>';
                 htmlString += `<li>Total Links Logged: <strong>${countSnr}</strong></li>`;
@@ -1296,17 +1320,16 @@ function calculateAndShowStats() {
                 htmlString += `<li>Bad (< -10 dB): <strong>${snrBad}</strong> <em>(${(snrBad / countSnr * 100).toFixed(1)}%)</em></li>`;
                 htmlString += '</ul>';
             } else {
-                htmlString += '<p>No SNR data found in the last 14 days.</p>';
+                htmlString += `<p>No SNR data found for ${frequencyFilter} MHz links in the last 7 days.</p>`;
             }
             // --- END SNR HTML ---
             
-            // --- MODIFIED: Removed "(from online nodes)" ---
-            htmlString += '<h3>Averages</h3><ul>';
+            htmlString += '<h3>Averages (from online nodes)</h3><ul>';
             htmlString += `<li>Avg. Battery: <strong>${avgBatteryLevel.toFixed(1)}%</strong> (from ${countBatteryNodes} nodes)</li>`;
             htmlString += `<li>Avg. Uptime: <strong>${avgUptimeString}</strong> (from ${countUptimeNodes} nodes)</li>`;
             htmlString += '</ul>';
 
-            htmlString += '<h3>Distribution by Role (all nodes)</h3><ul>';
+            htmlString += `<h3>Distribution by Role (${frequencyFilter} MHz nodes)</h3><ul>`;
             for (const roleId in roleCounts) {
                 // Calculate and add percentage ---
                 const roleName = ROLE_MAP_LONG[roleId] || `Unknown (${roleId})`;
@@ -1316,21 +1339,18 @@ function calculateAndShowStats() {
             }
             htmlString += '</ul>';
 
-            htmlString += '<h3>Distribution by Frequency (all nodes)</h3><ul>';
-            for (const freq in freqCounts) {
-                const freqName = (freq == "0") ? "Unknown" : `${freq} MHz`;
-                htmlString += `<li>${freqName}: <strong>${freqCounts[freq]}</strong></li>`;
-            }
-            htmlString += '</ul>';
-
             statsContent.innerHTML = htmlString;
         }
-        // --- END MODIFIED FUNCTION ---
-
-        statsButton.addEventListener('click', () => {
-            calculateAndShowStats();
+        statsButton433.addEventListener('click', () => {
+            calculateAndShowStats('433'); // Pass '433'
             statsModal.style.display = 'block';
         });
+
+        statsButton868.addEventListener('click', () => {
+            calculateAndShowStats('868'); // Pass '868'
+            statsModal.style.display = 'block';
+        });
+        // --- END MODIFIED ---
 
         statsCloseBtn.addEventListener('click', () => {
             statsModal.style.display = 'none';

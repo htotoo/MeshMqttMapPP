@@ -1,12 +1,61 @@
 #include "discord.hpp"
 #include <iostream>
+
+std::string DiscordBot::escape_json(const std::string& s) {
+    std::string escaped;
+    // Reserve space to avoid frequent reallocations.
+    // This is a heuristic; we know the new string will be
+    // at least as long as the original.
+    escaped.reserve(s.length());
+
+    // A lookup table is faster than conditional logic for hex conversion
+    static const char* hex_chars = "0123456789abcdef";
+
+    for (unsigned char c : s) {
+        switch (c) {
+            case '"':
+                escaped.append("\\\"");
+                break;
+            case '\\':
+                escaped.append("\\\\");
+                break;
+            case '\b':
+                escaped.append("\\b");
+                break;
+            case '\f':
+                escaped.append("\\f");
+                break;
+            case '\n':
+                escaped.append("\\n");
+                break;
+            case '\r':
+                escaped.append("\\r");
+                break;
+            case '\t':
+                escaped.append("\\t");
+                break;
+            default:
+                if (c >= 0x00 && c <= 0x1F) {
+                    // This is a control character. Escape as \u00XX
+                    escaped.append("\\u00");
+                    escaped.push_back(hex_chars[(c >> 4) & 0x0F]);
+                    escaped.push_back(hex_chars[c & 0x0F]);
+                } else {
+                    // This is a standard printable character.
+                    escaped.push_back(c);
+                }
+        }
+    }
+    return escaped;
+}
+
 void DiscordBot::sendQueuedMessage() {
     std::lock_guard<std::mutex> lock(mtx);
     if (messageQueue.empty()) {
         return;
     }
 
-    std::string message = messageQueue.front();
+    std::string message = escape_json(messageQueue.front());
     messageQueue.pop();
 
     std::string json_payload = R"({"content": ")" + message + R"("})";

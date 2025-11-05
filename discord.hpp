@@ -13,6 +13,7 @@ class DiscordBot {
     void loop();
 
    private:
+    std::string escape_json(const std::string& s);
     void sendQueuedMessage();
     std::string apiToken;
     std::string chatId;
