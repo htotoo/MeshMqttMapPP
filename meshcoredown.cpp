@@ -85,7 +85,15 @@ void MeshCoreDown::checkNew() {
                     discordBot.queueMessage(discord_msg);
                     discordBot.loop();
                 }
-            };
+            }
+            if (channel_id == 1) {
+                std::string discord_msg = std::string(node_name) + ": " + std::string(message);
+                if (discord_msg != lastmsg) {
+                    lastmsg = discord_msg;
+                    discordBotPub.queueMessage(discord_msg);
+                    discordBotPub.loop();
+                }
+            }
         }
         json_value_free(root_value);
     } catch (const std::exception& e) {

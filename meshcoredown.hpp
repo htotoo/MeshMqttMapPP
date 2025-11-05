@@ -16,5 +16,6 @@ class MeshCoreDown {
     uint8_t cnt = 0;
     uint64_t last_check_time = 0;
     DiscordBot discordBot{DISCORD_MESHCORE};
+    DiscordBot discordBotPub{DISCORD_MESHCORE_PUB};
     std::string lastmsg = "";
 };

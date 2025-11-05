@@ -10,6 +10,7 @@ $db_path = '/home/totoo/projects/meshlogger/build/nodes.db';
 $nodes = [];
 $snr_data = [];
 $chat_messages = [];
+$main_stats = []; // Initialize array for new stats
 $node_count = 0;
 
 $sort_by = $_GET['sort'] ?? 'last_updated';
@@ -73,7 +74,7 @@ try {
     }
     $node_count = count($nodes);
 
-    $snr_stmt = $db->query("SELECT node1, node2, snr FROM snr WHERE last_updated >= date('now', '-7 days') AND node1 != node2 AND snr != 0");
+    $snr_stmt = $db->query("SELECT node1, node2, snr FROM snr WHERE last_updated >= date('now', '-7 days') AND node1 != node2 AND snr != 0 AND node1 != -1 AND node2 != -1");
     $snr_data = $snr_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
@@ -101,6 +102,11 @@ try {
             'has_coords' => $has_coords
         ];
     }
+
+    // --- MODIFIED: Query mainstats table (LIMIT 5) ---
+    $stats_stmt = $db->query("SELECT allcnt, decoded, handled, time FROM mainstats ORDER BY time DESC LIMIT 5");
+    $main_stats = $stats_stmt->fetchAll(PDO::FETCH_ASSOC);
+    // --- END MODIFIED ---
 
 } catch (PDOException $e) {
     die("Database Error: " . $e->getMessage());
@@ -175,10 +181,10 @@ try {
             font-weight: bold;
             text-align: center;
             flex-shrink: 0;
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            gap: 10px; 
+            display: flex; /* Added for alignment */
+            justify-content: center; /* Added for alignment */
+            align-items: center; /* Added for alignment */
+            gap: 10px; /* Added for spacing */
         }
         #stats-button {
             font-size: 0.8em;
@@ -395,6 +401,24 @@ try {
         .modal-content li {
             margin-bottom: 5px;
         }
+        /* --- Style for stats table --- */
+        .modal-content table {
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+        .modal-content th, .modal-content td {
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        .modal-content th {
+            background-color: #f4f4f4;
+        }
+        .modal-content td small {
+            color: #555;
+        }
         .close-btn {
             color: #aaa;
             float: right;
@@ -601,6 +625,8 @@ try {
 
         const nodes = <?php echo json_encode($nodes); ?>;
         const snrData = <?php echo json_encode($snr_data); ?>;
+        // --- Get mainStats data ---
+        const mainStats = <?php echo json_encode($main_stats); ?>;
         const markerLayer = {};
         const individualMarkerLayer = {};
 
@@ -1021,9 +1047,38 @@ try {
         const statsCloseBtn = statsModal.querySelector('.close-btn');
         const statsContent = document.getElementById('stats-content');
 
+// --- MODIFIED: calculateAndShowStats ---
 function calculateAndShowStats() {
+            let htmlString = ''; // Start with an empty string
+
+            // --- Display mainStats from the new table ---
+            htmlString += '<h3>Recent Mesh Activity</h3>';
+            if (mainStats && mainStats.length > 0) {
+                htmlString += '<table>';
+                htmlString += '<thead><tr><th>Time (UTC)</th><th>All Pkts</th><th>Decoded</th><th>Handled</th></tr></thead>';
+                htmlString += '<tbody>';
+                
+                mainStats.forEach(stat => {
+                    htmlString += '<tr>';
+                    htmlString += `<td><small>${stat.time}</small></td>`;
+                    htmlString += `<td>${stat.allcnt}</td>`;
+                    htmlString += `<td>${stat.decoded}</td>`;
+                    htmlString += `<td>${stat.handled}</td>`;
+                    htmlString += '</tr>';
+                });
+
+                htmlString += '</tbody></table>';
+                // --- NEW: Add timestamp below table ---
+                htmlString += `<p style="font-size: 0.9em; color: #555; margin: 5px 0 0 0;">Latest data from: <strong>${mainStats[0].time} UTC</strong></p>`;
+            } else {
+                htmlString += '<p>No recent mesh activity stats found.</p>';
+            }
+            // --- END NEW ---
+
+
             if (!nodes || nodes.length === 0) {
-                statsContent.innerHTML = '<p>No node data to analyze.</p>';
+                htmlString += '<p style="margin-top: 20px;">No node data to analyze.</p>';
+                statsContent.innerHTML = htmlString;
                 return;
             }
 
@@ -1194,21 +1249,35 @@ function calculateAndShowStats() {
             }
             // --- END SNR CALC ---
             
-            // --- Build HTML ---
-            let htmlString = '<h3>Node Status</h3><ul>';
+            // --- Build HTML (append to htmlString) ---
+            htmlString += '<h3>Node Status</h3><ul>';
             htmlString += `<li>Total Nodes: <strong>${totalNodes}</strong></li>`;
             htmlString += `<li>Online Nodes: <strong>${onlineNodes}</strong></li>`;
             htmlString += `<li>Stale Nodes: <strong>${staleNodes}</strong></li>`;
             htmlString += `<li>Nodes with GPS: <strong>${nodesWithCoords}</strong></li>`;
             htmlString += '</ul>';
 
-            htmlString += '<h3>Message Counts (from online nodes)</h3><ul>';
+            // --- MODIFIED: Removed "(from online nodes)" ---
+            htmlString += '<h3>Message Counts</h3><ul>';
             htmlString += `<li><strong>Total All Msgs/hr: ${totalSumCntPh.toFixed(2)}</strong> <em>(${totalSumCntPs.toFixed(4)} msgs/sec)</em></li>`;
-            htmlString += `<li>Text Msgs/hr: ${totalMsgCntPh.toFixed(2)} <em>(Top: ${topMsgNodeName} - ${maxMsgCntPh.toFixed(2)})</em></li>`;
-            htmlString += `<li>Traceroute/hr: ${totalTraceCntPh.toFixed(2)} <em>(Top: ${topTraceNodeName} - ${maxTraceCntPh.toFixed(2)})</em></li>`;
-            htmlString += `<li>Telemetry/hr: ${totalTelemetryCntPh.toFixed(2)} <em>(Top: ${topTelemetryNodeName} - ${maxTelemetryCntPh.toFixed(2)})</em></li>`;
-            htmlString += `<li>NodeInfo/hr: ${totalNodeInfoCntPh.toFixed(2)} <em>(Top: ${topNodeInfoNodeName} - ${maxNodeInfoCntPh.toFixed(2)})</em></li>`;
-            htmlString += `<li>Position/hr: ${totalPosCntPh.toFixed(2)} <em>(Top: ${topPosNodeName} - ${maxPosCntPh.toFixed(2)})</em></li>`;
+
+            // --- NEW: Add Ratio ---
+            if (mainStats && mainStats.length > 0) {
+                const newestAllPkts = parseFloat(mainStats[0].allcnt) || 0;
+                if (newestAllPkts > 0) {
+                    const ratio = newestAllPkts / totalSumCntPh;
+                    htmlString += `<li>All packets / sent packets (avg repeat count): <strong>${ratio.toFixed(2)}</strong></li>`;
+                } else {
+                    htmlString += `<li>All packets / sent packets (avg repeat count): <strong>N/A</strong> <em>(Newest Pkts is 0)</em></li>`;
+                }
+            }
+            // --- END NEW ---
+
+            htmlString += `<li>Text Msgs/hr: ${totalMsgCntPh.toFixed(0)} <em>(Top: ${topMsgNodeName} - ${maxMsgCntPh.toFixed(0)})</em></li>`;
+            htmlString += `<li>Traceroute/hr: ${totalTraceCntPh.toFixed(0)} <em>(Top: ${topTraceNodeName} - ${maxTraceCntPh.toFixed(0)})</em></li>`;
+            htmlString += `<li>Telemetry/hr: ${totalTelemetryCntPh.toFixed(0)} <em>(Top: ${topTelemetryNodeName} - ${maxTelemetryCntPh.toFixed(0)})</em></li>`;
+            htmlString += `<li>NodeInfo/hr: ${totalNodeInfoCntPh.toFixed(0)} <em>(Top: ${topNodeInfoNodeName} - ${maxNodeInfoCntPh.toFixed(0)})</em></li>`;
+            htmlString += `<li>Position/hr: ${totalPosCntPh.toFixed(0)} <em>(Top: ${topPosNodeName} - ${maxPosCntPh.toFixed(0)})</em></li>`;
             htmlString += '</ul>';
 
             // --- Add SNR Stats to HTML ---
@@ -1231,7 +1300,8 @@ function calculateAndShowStats() {
             }
             // --- END SNR HTML ---
             
-            htmlString += '<h3>Averages (from online nodes)</h3><ul>';
+            // --- MODIFIED: Removed "(from online nodes)" ---
+            htmlString += '<h3>Averages</h3><ul>';
             htmlString += `<li>Avg. Battery: <strong>${avgBatteryLevel.toFixed(1)}%</strong> (from ${countBatteryNodes} nodes)</li>`;
             htmlString += `<li>Avg. Uptime: <strong>${avgUptimeString}</strong> (from ${countUptimeNodes} nodes)</li>`;
             htmlString += '</ul>';
@@ -1255,6 +1325,7 @@ function calculateAndShowStats() {
 
             statsContent.innerHTML = htmlString;
         }
+        // --- END MODIFIED FUNCTION ---
 
         statsButton.addEventListener('click', () => {
             calculateAndShowStats();
