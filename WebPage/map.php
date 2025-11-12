@@ -22,6 +22,16 @@ if ($sort_by === 'msgcntph') {
     $order_by_sql = 'ORDER BY sumcntph DESC';
 }
 
+function getChanNameById($chan_id) {
+    $chan_map = [
+        0 => 'LongFast',
+        8 =>  'LongFast',
+        31 => 'MediFast',
+        92 => 'Hungary ',
+    ];
+    return $chan_map[$chan_id] ?? 'Unknown';
+}
+
 $isDebug = (isset($_REQUEST["debug"]) && $_REQUEST["debug"] == 1);
 
 try {
@@ -80,12 +90,12 @@ try {
     $snr_data = $snr_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
-    $chat_stmt = $db->query("SELECT node_id, message, timestamp, freq FROM chat WHERE timestamp >= date('now', '-5 days') ORDER BY timestamp DESC");
+    $chat_stmt = $db->query("SELECT node_id, message, timestamp, freq, chan_id FROM chat WHERE timestamp >= date('now', '-5 days') ORDER BY timestamp DESC");
     $chat_rows = $chat_stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($chat_rows as $chat_row) {
         $sender_id = $chat_row['node_id'];
 		$freq = $chat_row['freq'];
-        
+        $chan_id = $chat_row['chan_id'];        
         $sender_display = '!' . substr(sprintf('%x', $sender_id), -8);
         $has_coords = false;
 
@@ -101,6 +111,7 @@ try {
             'message' => htmlspecialchars($chat_row['message'], ENT_QUOTES, 'UTF-8'),
             'timestamp' => htmlspecialchars($chat_row['timestamp'], ENT_QUOTES, 'UTF-8'),
 			'freq' => $freq,
+            'chan_id' => $chan_id,
             'has_coords' => $has_coords
         ];
     }
@@ -124,7 +135,6 @@ try {
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
 
     <?php if ($isDebug): ?>
-    <!-- This script will be loaded at the end of the body -->
     <?php endif; ?>
 
     <style>
@@ -515,14 +525,14 @@ try {
         </div>
         <div id="bottom-panel">
             <div id="chat-header">
-                <span>Chat / Log (<a href="https://discord.gg/T22ws9yw" onclick="event.stopPropagation();" class="chat-title-link" target="_blank" >Discord csatorna</a>)</span>
+                <span>Chat / Log (<a href="https://discord.gg/vrdSTQmzMY" onclick="event.stopPropagation();" class="chat-title-link" target="_blank" >Discord chatlog+csevegő</a>)</span>
                 <span id="chat-toggle-btn">▼</span>
             </div>
             <div id="chat-content">
                 <?php if (!empty($chat_messages)): ?>
                     <?php foreach ($chat_messages as $msg): ?>
                         <div class="chat-message">
-                            <span class="chat-timestamp">[<?php echo $msg['timestamp']; ?>] [<?php echo $msg['freq']; ?>]</span>
+                            <span class="chat-timestamp">[<?php echo $msg['timestamp']; ?>] [<?php echo $msg['freq']; echo "-"; echo getChanNameById($msg['chan_id']); ?>]</span>
                             <?php if ($msg['has_coords']): ?>
                                 <a href="#" class="chat-sender-link" onclick="handleChatLinkClick(event, <?php echo $msg['node_id']; ?>)"><?php echo $msg['sender']; ?>:</a>
                             <?php else: ?>
@@ -900,12 +910,12 @@ try {
 
         map.on('popupclose', () => {
             isPopupOpen = false;
-            selectedNodeIdForSnr = null; // Clear the selected node
-
-            // If SNR is active, we must redraw (to clear the lines)
-            if (snrToggle.checked) {
-                drawSnrLines(selectedNodeIdForSnr);
-            }
+            // ** MODIFICATION START **
+            // We no longer clear selectedNodeIdForSnr or redraw lines here.
+            // We want the lines to persist after the popup is closed.
+            // The lines will be cleared/updated when a new marker is clicked
+            // (triggering popupopen) or when 'Show SNR' is toggled.
+            // ** MODIFICATION END **
 
             // Clear the URL parameter
             const url = new URL(window.location);
@@ -1126,7 +1136,7 @@ try {
 
             if (showSnr) {
                 map.addLayer(allIndividualMarkersLayer);
-                drawSnrLines(selectedNodeIdForSnr);
+                drawSnrLines(selectedNodeIdForSnr); // This will redraw lines for the last selected node
                 map.addLayer(snrLayer);
             } else {
                 map.addLayer(allMarkersCluster);

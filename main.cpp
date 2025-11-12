@@ -146,10 +146,16 @@ void m_on_message(MC_Header& header, MC_TextMessage& message) {
         // return;
     }
 
-    nodeDb.saveChatMessage(header.srcnode, message.chan, message.text, header.freq);
+    nodeDb.saveChatMessage(header.srcnode, header.chan_hash, message.text, header.freq);
 
-    std::string telegramMessage = std::to_string(message.chan) + "@" + std::to_string(header.freq) + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
-    std::string discordMessage = std::to_string(message.chan) + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
+    std::string chanstr = "Unknown";
+    if (header.chan_hash == 0) chanstr = "LongFast";
+    if (header.chan_hash == 8) chanstr = "LongFast";
+    if (header.chan_hash == 31) chanstr = "MediFast";
+    if (header.chan_hash == 92) chanstr = "Hungary ";
+
+    std::string telegramMessage = std::to_string(header.freq) + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
+    std::string discordMessage = chanstr + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
     safe_printf("MSG: %s\n", telegramMessage.c_str());
     telegramPoster.queueMessage(telegramMessage);
     if (header.freq == 868) discordBot868.queueMessage(discordMessage);
