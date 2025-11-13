@@ -17,6 +17,14 @@ $ROLE_MAP_LONG = [
     8 => 'Client Hidden', 9 => 'Lost and Found', 10 => 'TAK Tracker', 11 => 'Router Late', 12 => 'Client base'
 ];
 
+function chanelName($chn)
+{
+	if ($chn=="8") return "LongFast";
+	if ($chn=="31") return "MediumFast";
+	if ($chn=="92") return "Hungary";
+	return strval($chn);
+}
+
 // Default response
 $response = [
     'status' => 'error',
@@ -68,7 +76,7 @@ try {
             // --- 2. Fetch all nodes (logic from map2.php) ---
             $nodes = [];
             $nodesById = [];
-            $stmt_nodes = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role, battery_voltage, uptime, msgcntph, tracecntph, telemetrycntph, nodeinfocntph, poscntph, sumcntph, chutil, lashchn FROM nodes');
+            $stmt_nodes = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role, battery_voltage, uptime, msgcntph, tracecntph, telemetrycntph, nodeinfocntph, poscntph, sumcntph, chutil, lastchn FROM nodes');
             $rows = $stmt_nodes->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as $row) {
                 $is_stale = false;
@@ -105,7 +113,7 @@ try {
                     'poscntph' => (int)($row['poscntph'] ?? 0),
                     'sumcntph' => (int)($row['sumcntph'] ?? 0),
                     'chutil' => (float)($row['chutil'] ?? 0.0),
-					'lashchn' => (int)($row['lastchn'] ?? 0),
+					'lastchn' => (int)($row['lastchn'] ?? 0),
                     'is_stale' => $is_stale
                 ];
                 $nodes[] = $node_data;
@@ -400,7 +408,7 @@ try {
                     'last_updated' => $node['last_updated'],
                     'frequency' => (int)$node['freq'],
                     'role' => $ROLE_MAP_LONG[$node['role']] ?? 'Unknown',
-					'lastchn' => $node['lastchn'] ?? 0,
+					'lastchn' => chanelName($node['lastchn']) ?? chanelName(0),
                     'uptime_seconds' => (int)$node['uptime'],
                     'telemetry' => [
                         'battery_level' => (int)$node['battery_level'],
