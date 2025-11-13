@@ -24,7 +24,6 @@ if ($sort_by === 'msgcntph') {
 
 function getChanNameById($chan_id) {
     $chan_map = [
-        0 => 'LongFast',
         8 =>  'LongFast',
         31 => 'MediFast',
         92 => 'Hungary ',
@@ -1197,6 +1196,7 @@ try {
         const statsCloseBtn = statsModal.querySelector('.close-btn');
         const statsContent = document.getElementById('stats-content');
 
+
 function calculateAndShowStats(frequencyFilter) {
             let htmlString = '';
 
@@ -1278,6 +1278,9 @@ function calculateAndShowStats(frequencyFilter) {
             let countChutilNodes = 0;
             
             let roleCounts = {};
+            // --- ADDED START ---
+            let channelCounts = {};
+            // --- ADDED END ---
 
             let maxMsgCntPh = 0;
             let topMsgNodeName = 'N/A';
@@ -1355,6 +1358,12 @@ function calculateAndShowStats(frequencyFilter) {
                 }
 
                 roleCounts[node.role] = (roleCounts[node.role] || 0) + 1;
+                
+                // --- ADDED START ---
+                // Count channel usage for all nodes (online and stale) for this frequency
+                const chanName = getChanNameById(node.lastchn);
+                channelCounts[chanName] = (channelCounts[chanName] || 0) + 1;
+                // --- ADDED END ---
             });
 
             const totalSumCntPs = totalSumCntPh / 3600;
@@ -1490,8 +1499,27 @@ function calculateAndShowStats(frequencyFilter) {
             }
             htmlString += '</ul>';
 
+            // --- ADDED START ---
+            htmlString += `<h3>Distribution by Last Channel for Nodeinfo (${frequencyFilter} MHz nodes)</h3><ul>`;
+            // Sort channels alphabetically for consistent order
+            const sortedChannels = Object.keys(channelCounts).sort();
+            
+            if (sortedChannels.length > 0) {
+                sortedChannels.forEach(chanName => {
+                    const count = channelCounts[chanName];
+                    // Base percentage on totalNodes for this frequency
+                    const percentage = (count / totalNodes) * 100; 
+                    htmlString += `<li>${chanName}: <strong>${count}</strong> <em>(${percentage.toFixed(1)}%)</em></li>`;
+                });
+            } else {
+                 htmlString += `<li>No channel data found.</li>`;
+            }
+            htmlString += '</ul>';
+            // --- ADDED END ---
+
             statsContent.innerHTML = htmlString;
         }
+
         statsButton433.addEventListener('click', () => {
             calculateAndShowStats('433');
             statsModal.style.display = 'block';
