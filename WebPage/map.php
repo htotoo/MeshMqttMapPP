@@ -29,7 +29,7 @@ function getChanNameById($chan_id) {
         31 => 'MediFast',
         92 => 'Hungary ',
     ];
-    return $chan_map[$chan_id] ?? 'Unknown';
+    return $chan_map[$chan_id] ?? 'Unk(' . strval($chan_id) . ')';
 }
 
 $isDebug = (isset($_REQUEST["debug"]) && $_REQUEST["debug"] == 1);
@@ -40,7 +40,7 @@ try {
     $db->setAttribute(PDO::ATTR_TIMEOUT, 5);
 
     $node_map = [];
-    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role, battery_voltage, uptime, msgcntph, tracecntph, telemetrycntph, nodeinfocntph, poscntph, sumcntph, chutil FROM nodes ' . $order_by_sql);
+    $stmt = $db->query('SELECT node_id, short_name, long_name, latitude, longitude, last_updated, battery_level, temperature, freq, role, battery_voltage, uptime, msgcntph, tracecntph, telemetrycntph, nodeinfocntph, poscntph, sumcntph, chutil, lastchn FROM nodes ' . $order_by_sql);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as $row) {
         $hex = sprintf('%x', $row['node_id']);
@@ -79,6 +79,7 @@ try {
             'poscntph' => $row['poscntph'] ?? 0,
             'sumcntph' => $row['sumcntph'] ?? 0,
             'chutil' => (float)($row['chutil'] ?? 0.0),
+            'lastchn' => $row['lastchn'] ?? 0,
             'is_stale' => $is_stale
         ];
         $nodes[] = $node_data;
@@ -712,7 +713,8 @@ try {
             selectedNodeIdForSnr = node.node_id; // Set the selected node
 
             const roleText = ROLE_MAP_LONG[node.role] || 'Unknown';
-            let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}.<br>Cnt:${node.sumcntph} (Msg:${node.msgcntph}, Trc:${node.tracecntph}, Tel:${node.telemetrycntph}, NI:${node.nodeinfocntph}, Pos:${node.poscntph})`;
+            const lastChnText = getChanNameById(node.lastchn);
+            let content = `<b>${node.long_name}</b> (${node.node_id_hex})<br>Short Name: ${node.short_name}<br>Last Seen: ${timeAgo(node.last_updated)}.<br>Last nodeinfo chn: ${lastChnText}<br/>Cnt:${node.sumcntph} (Msg:${node.msgcntph}, Trc:${node.tracecntph}, Tel:${node.telemetrycntph}, NI:${node.nodeinfocntph}, Pos:${node.poscntph})`;
             
             const uptimeText = formatUptime(node.uptime);
             if (uptimeText) {
