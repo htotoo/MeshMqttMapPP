@@ -566,6 +566,20 @@ try {
     <?php endif; ?>
 
     <script>
+
+        function getChanNameById($chan_id) {
+            switch ($chan_id) {
+                case '8':
+                    return 'LongFast';
+                case '31':
+                    return 'MediFast';
+                case '92':
+                    return 'Hungary ';
+                default:
+                    return 'Unk(' + $chan_id.toString() + ')';
+            }
+        }
+
         const isDebug = <?php echo json_encode($isDebug); ?>;
     
         function timeAgo(timestamp) {
@@ -803,6 +817,7 @@ try {
                 
                 let statsHtml = '';
                 const roleShortText = ROLE_MAP_SHORT[node.role] || '??';
+                const lastChnText = getChanNameById(node.lastchn);
                 statsHtml += `<span>Role: ${roleShortText}</span>`;
                 
                 let uptimeHtml = '';
@@ -813,6 +828,9 @@ try {
 
                 if (node.freq > 0) {
                      statsHtml += `<span>F: ${node.freq} MHz</span>`;
+                }
+                if (lastChnText) {
+                    statsHtml += `<span>Chn: ${lastChnText}</span>`;
                 }
                 if (node.battery_level > 0) {
                     let batteryText = `🔋 ${node.battery_level}%`;

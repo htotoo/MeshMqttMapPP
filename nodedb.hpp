@@ -83,7 +83,7 @@ class NodeDb {
         sqlite3_stmt* stmt;
         const char* sql =
             "INSERT INTO nodes (node_id, short_name, long_name, freq, role, lastchn, last_updated) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
-            "ON CONFLICT(node_id) DO UPDATE SET short_name=excluded.short_name, long_name=excluded.long_name, freq=excluded.freq, role=excluded.role, uptime=excluded.uptime, last_updated=CURRENT_TIMESTAMP";
+            "ON CONFLICT(node_id) DO UPDATE SET short_name=excluded.short_name, long_name=excluded.long_name, freq=excluded.freq, role=excluded.role, uptime=excluded.uptime, lastchn=excluded.lastchn, last_updated=CURRENT_TIMESTAMP";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, nodeId);
             sqlite3_bind_text(stmt, 2, shortName.c_str(), -1, SQLITE_STATIC);

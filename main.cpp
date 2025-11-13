@@ -181,7 +181,7 @@ void m_on_node_info(MC_Header& header, MC_NodeInfo& nodeinfo, bool needReply) {
     if (messageIdTrackerTelemetry.check(header.packet_id)) {
         return;
     }
-    safe_printf("Node Info from node 0x%08" PRIx32 ": ID: %s, Short Name: %s, Long Name: %s\n", header.srcnode, nodeinfo.id, nodeinfo.short_name, nodeinfo.long_name);
+    safe_printf("Node Info from node 0x%08" PRIx32 ": ID: %s, Short Name: %s, Long Name: %s, Chanhash: %u\n", header.srcnode, nodeinfo.id, nodeinfo.short_name, nodeinfo.long_name, header.chan_hash);
     nodeDb.setNodeInfo(header.srcnode, nodeinfo.short_name, nodeinfo.long_name, header.freq, nodeinfo.role, header.chan_hash);
     nodeNameMap.setNodeName(header.srcnode, nodeinfo.short_name);
     nodeNameMap.incrementNodeInfoCount(header.srcnode);
