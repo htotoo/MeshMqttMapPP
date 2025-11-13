@@ -182,7 +182,7 @@ void m_on_node_info(MC_Header& header, MC_NodeInfo& nodeinfo, bool needReply) {
         return;
     }
     safe_printf("Node Info from node 0x%08" PRIx32 ": ID: %s, Short Name: %s, Long Name: %s\n", header.srcnode, nodeinfo.id, nodeinfo.short_name, nodeinfo.long_name);
-    nodeDb.setNodeInfo(header.srcnode, nodeinfo.short_name, nodeinfo.long_name, header.freq, nodeinfo.role);
+    nodeDb.setNodeInfo(header.srcnode, nodeinfo.short_name, nodeinfo.long_name, header.freq, nodeinfo.role, header.chan_hash);
     nodeNameMap.setNodeName(header.srcnode, nodeinfo.short_name);
     nodeNameMap.incrementNodeInfoCount(header.srcnode);
 }
