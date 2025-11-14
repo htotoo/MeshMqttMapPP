@@ -257,7 +257,7 @@ void m_on_neighbor_info(MC_Header& header, meshtastic_NeighborInfo& neighborinfo
     safe_printf("Neighbor Info from node 0x%08" PRIx32 "\n", header.srcnode);
     for (size_t i = 0; i < neighborinfo.neighbors_count; i++) {
         meshtastic_Neighbor& neighbor = neighborinfo.neighbors[i];
-        safe_printf("  Neighbor 0x%08" PRIx32 ":  SNR: %d\n", neighbor.node_id, neighbor.snr);
+        safe_printf("  Neighbor 0x%08" PRIx32 ":  SNR: %f\n", neighbor.node_id, neighbor.snr);
         nodeDb.saveNodeSNR(neighbor.node_id, header.srcnode, neighbor.snr);
     }
 }
