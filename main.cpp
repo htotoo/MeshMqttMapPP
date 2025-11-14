@@ -253,6 +253,15 @@ void m_on_traceroute(MC_Header& header, MC_RouteDiscovery& route, bool for_me, b
     }
 }
 
+void m_on_neighbor_info(MC_Header& header, meshtastic_NeighborInfo& neighborinfo) {
+    safe_printf("Neighbor Info from node 0x%08" PRIx32 "\n", header.srcnode);
+    for (size_t i = 0; i < neighborinfo.neighbors_count; i++) {
+        meshtastic_Neighbor& neighbor = neighborinfo.neighbors[i];
+        safe_printf("  Neighbor 0x%08" PRIx32 ":  SNR: %d\n", neighbor.node_id, neighbor.snr);
+        nodeDb.saveNodeSNR(neighbor.node_id, header.srcnode, neighbor.snr);
+    }
+}
+
 void handle_signal(int signal) {
     if (signal == SIGINT) {
         safe_printf("\nCaught SIGINT, exiting...\n");
@@ -292,6 +301,7 @@ int main(int argc, char* argv[]) {
     localClient.setOnTelemetryDevice(m_on_telemetry_device);
     localClient.setOnTelemetryEnvironment(m_on_telemetry_environment);
     localClient.setOnTraceroute(m_on_traceroute);
+    localClient.setOnNeighborInfo(m_on_neighbor_info);
     mainClient.setOnMessage(m_on_message);
     mainClient.setOnPositionMessage(m_on_position_message);
     mainClient.setOnWaypointMessage(m_on_waypoint_message);
@@ -299,6 +309,7 @@ int main(int argc, char* argv[]) {
     mainClient.setOnTelemetryDevice(m_on_telemetry_device);
     mainClient.setOnTelemetryEnvironment(m_on_telemetry_environment);
     mainClient.setOnTraceroute(m_on_traceroute);
+    mainClient.setOnNeighborInfo(m_on_neighbor_info);
     mainClient.init();
     localClient.init();
     uint32_t timer = 0;

@@ -47,6 +47,12 @@ class MeshMqttClient {
     using OnTelemetryEnvironmentCallback = void (*)(MC_Header& header, MC_Telemetry_Environment& telemetry);
     using OnTracerouteCallback = void (*)(MC_Header& header, MC_RouteDiscovery& route, bool for_me, bool is_reply, bool need_reply);
     using OnRaw = void (*)(const uint8_t* data, size_t len);
+    using OnNeighborInfoCallback = void (*)(MC_Header& header, meshtastic_NeighborInfo& neighborinfo);
+
+    void setOnNeighborInfo(OnNeighborInfoCallback cb) {
+        onNeighborInfo = cb;
+    }
+
     void setOnWaypointMessage(OnWaypointMessageCallback cb) {
         onWaypointMessage = cb;
     }
@@ -118,6 +124,7 @@ class MeshMqttClient {
     OnTelemetryDeviceCallback onTelemetryDevice = nullptr;
     OnTelemetryEnvironmentCallback onTelemetryEnvironment = nullptr;
     OnTracerouteCallback onTraceroute = nullptr;
+    OnNeighborInfoCallback onNeighborInfo = nullptr;
     OnRaw onRaw = nullptr;
 
     const uint8_t default_l1_key[16] =
