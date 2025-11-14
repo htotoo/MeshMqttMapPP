@@ -145,8 +145,8 @@ void m_on_message(MC_Header& header, MC_TextMessage& message) {
     if (message.text.find("seq ", 0) == 0) {
         // return;
     }
-
-    nodeDb.saveChatMessage(header.srcnode, header.chan_hash, message.text, header.freq);
+    std::string emojiStr = header.emoji ? "(EMOJI) " : "";
+    nodeDb.saveChatMessage(header.srcnode, header.chan_hash, emojiStr + message.text, header.freq);
 
     std::string chanstr = "Unknown";
     if (header.chan_hash == 0) chanstr = "LongFast";
@@ -155,7 +155,7 @@ void m_on_message(MC_Header& header, MC_TextMessage& message) {
     if (header.chan_hash == 92) chanstr = "Hungary ";
 
     std::string telegramMessage = std::to_string(header.freq) + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
-    std::string discordMessage = chanstr + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + message.text;
+    std::string discordMessage = chanstr + "# " + nodeNameMap.getNodeName(header.srcnode) + ":  " + emojiStr + message.text;
     safe_printf("MSG: %s\n", telegramMessage.c_str());
     telegramPoster.queueMessage(telegramMessage);
     if (header.freq == 868) discordBot868.queueMessage(discordMessage);
@@ -213,9 +213,6 @@ void m_on_telemetry_environment(MC_Header& header, MC_Telemetry_Environment& tel
 }
 
 void m_on_traceroute(MC_Header& header, MC_RouteDiscovery& route, bool for_me, bool is_reply, bool need_reply) {
-    // if (messageIdTracker.check(header.packet_id)) {
-    //  return; //need to get the same multiple times, since the same message will get more and more data
-    //}
     if (header.via_mqtt) {
         safe_printf("Skip bc mqtt\n");
         return;
@@ -223,22 +220,36 @@ void m_on_traceroute(MC_Header& header, MC_RouteDiscovery& route, bool for_me, b
     nodeNameMap.incrementTraceCount(header.srcnode);
     // Print the route details if needed
     uint32_t n1 = (route.route_back_count > 0) ? header.dstnode : header.srcnode;
-    safe_printf("Traceroute from node 0x%08" PRIx32 ": Route Count: %d\n", n1, route.route_count);
+    safe_printf("Traceroute from node 0x%08" PRIx32 " to node 0x%08" PRIx32 ": Route Count: %d Back count: %d\n", header.srcnode, header.dstnode, route.route_count, route.route_back_count);
+    bool hasbad = false;
     for (int i = 0; i < route.route_count; i++) {
-        safe_printf("Route[%d]: Node 0x%08" PRIx32 ", SNR: %d\n", i, route.route[i], route.snr_towards[i] / 4);
-        safe_printf("0x%08" PRIx32 " -> 0x%08" PRIx32 "  : %d\n", n1, route.route[i], route.snr_towards[i] / 4);
-        nodeDb.saveNodeSNR(n1, route.route[i], route.snr_towards[i] / 4);
-        n1 = route.route[i];
+        if (route.route[i] == 0xffffffff || route.route[i] == 0) {
+            hasbad = true;
+        }
+    }
+    if (!hasbad) {
+        for (int i = 0; i < route.route_count; i++) {
+            safe_printf("Route [%d]: 0x%08" PRIx32 " -> 0x%08" PRIx32 "  : %d\n", i, n1, route.route[i], route.snr_towards[i] / 4);
+            nodeDb.saveNodeSNR(n1, route.route[i], route.snr_towards[i] / 4);
+            n1 = route.route[i];
+        }
     }
     if (route.route_back_count > 0) {
         // nodeDb.saveNodeSNR(n1, header.srcnode, route.snr_towards[route.route_count + 1]);
     }
-    n1 = (route.route_back_count > 0) ? header.srcnode : header.dstnode;
+    hasbad = false;
     for (int i = 0; i < route.route_back_count; i++) {
-        safe_printf("Back[%d]: Node 0x%08" PRIx32 ", SNR: %d\n", i, route.route_back[i], route.snr_back[i] / 4);
-        nodeDb.saveNodeSNR(n1, route.route_back[i], route.snr_back[i] / 4);
-        safe_printf("0x%08" PRIx32 " -> 0x%08" PRIx32 "  : %d\n", n1, route.route_back[i], route.snr_back[i] / 4);
-        n1 = route.route_back[i];
+        if (route.route_back[i] == 0xffffffff || route.route_back[i] == 0) {
+            hasbad = true;
+        }
+    }
+    if (!hasbad) {
+        n1 = (route.route_back_count > 0) ? header.srcnode : header.dstnode;
+        for (int i = 0; i < route.route_back_count; i++) {
+            nodeDb.saveNodeSNR(n1, route.route_back[i], route.snr_back[i] / 4);
+            safe_printf("Back[%d]: 0x%08" PRIx32 " -> 0x%08" PRIx32 "  : %d\n", i, n1, route.route_back[i], route.snr_back[i] / 4);
+            n1 = route.route_back[i];
+        }
     }
 }
 

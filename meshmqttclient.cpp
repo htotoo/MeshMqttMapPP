@@ -419,6 +419,7 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
         }
 
         if (ret >= 0) {
+            header.emoji = decodedtmp.emoji != 0;
             if (freq == 868)
                 msgnum_decoded_868++;
             else

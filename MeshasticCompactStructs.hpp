@@ -56,6 +56,7 @@ struct MC_Header {
     uint32_t request_id;
     uint32_t reply_id;
     uint16_t freq;
+    bool emoji;
 };
 
 struct MC_OutQueueEntry {
