@@ -703,9 +703,10 @@ int16_t MeshMqttClient::ProcessPacket(uint8_t* data, int len, uint16_t freq) {
                 safe_printf("Received a NEIGHBORINFO_APP   packet");
                 meshtastic_NeighborInfo neighbor_info_msg = {};
                 if (pb_decode_from_bytes(decodedtmp.payload.bytes, decodedtmp.payload.size, &meshtastic_NeighborInfo_msg, &neighbor_info_msg)) {
+                    if (onNeighborInfo) onNeighborInfo(header, neighbor_info_msg);
                 } else {
                     // safe_printf("Failed to decode NeighborInfo");
-                                }
+                }
                 pb_release(&meshtastic_NeighborInfo_msg, &neighbor_info_msg);
             } else {
                 safe_printf("Received an unhandled portnum: %d", decodedtmp.portnum);
