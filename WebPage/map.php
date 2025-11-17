@@ -709,6 +709,11 @@ try {
         const snrLayer = L.layerGroup();
         let chutilHeatLayer = null;
 
+		chatHeader.addEventListener('click', () => {
+            const isCollapsed = bottomPanel.classList.toggle('collapsed');
+            chatToggleBtn.innerHTML = isCollapsed ? '▲' : '▼';
+            setTimeout(() => map.invalidateSize(), 300);
+        });
 
         panelToggleBtn.parentElement.addEventListener('click', () => {
             const isCollapsed = nodeListPanel.classList.toggle('collapsed');
