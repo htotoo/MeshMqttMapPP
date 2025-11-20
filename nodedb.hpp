@@ -101,7 +101,7 @@ class NodeDb {
         sqlite3_finalize(stmt);
     }
 
-    void setNodeTemperature(uint32_t nodeId, float temperature) {
+    void setNodeTemperature(uint32_t nodeId, float temperature, uint8_t chanhash) {
         std::lock_guard<std::mutex> lock(mtx);
         if (!db) return;
         if (temperature < -100 || temperature > 300) {
@@ -109,10 +109,11 @@ class NodeDb {
         }
 
         sqlite3_stmt* stmt;
-        const char* sql = "UPDATE nodes SET temperature = ?, last_updated = CURRENT_TIMESTAMP WHERE node_id = ?";
+        const char* sql = "UPDATE nodes SET temperature = ?, lastchn = ?, last_updated = CURRENT_TIMESTAMP WHERE node_id = ?";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
             sqlite3_bind_double(stmt, 1, temperature);
-            sqlite3_bind_int(stmt, 2, nodeId);
+            sqlite3_bind_int(stmt, 2, chanhash);
+            sqlite3_bind_int(stmt, 3, nodeId);
 
             if (sqlite3_step(stmt) != SQLITE_DONE) {
                 std::cerr << "Error updating node temperature: " << sqlite3_errmsg(db) << std::endl;
@@ -123,7 +124,7 @@ class NodeDb {
         sqlite3_finalize(stmt);
     }
 
-    void setNodeTelemetryDevice(uint32_t nodeId, int batteryLevel, float voltage, uint32_t uptime, float chutil) {
+    void setNodeTelemetryDevice(uint32_t nodeId, int batteryLevel, float voltage, uint32_t uptime, float chutil, uint8_t chanhash) {
         std::lock_guard<std::mutex> lock(mtx);
         if (!db) return;
         if (batteryLevel < 0 || batteryLevel > 101) {
@@ -131,13 +132,14 @@ class NodeDb {
         }
 
         sqlite3_stmt* stmt;
-        const char* sql = "UPDATE nodes SET battery_level = ?, battery_voltage = ?, uptime = ?, chutil = ?, last_updated = CURRENT_TIMESTAMP WHERE node_id = ?";
+        const char* sql = "UPDATE nodes SET battery_level = ?, battery_voltage = ?, uptime = ?, chutil = ?,lastchn = ?, last_updated = CURRENT_TIMESTAMP WHERE node_id = ?";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, batteryLevel);
             sqlite3_bind_double(stmt, 2, voltage);
             sqlite3_bind_int(stmt, 3, uptime);
             sqlite3_bind_double(stmt, 4, chutil);
-            sqlite3_bind_int(stmt, 5, nodeId);
+            sqlite3_bind_int(stmt, 5, chanhash);
+            sqlite3_bind_int(stmt, 6, nodeId);
 
             if (sqlite3_step(stmt) != SQLITE_DONE) {
                 std::cerr << "Error updating node battery level: " << sqlite3_errmsg(db) << std::endl;

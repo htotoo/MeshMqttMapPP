@@ -200,7 +200,7 @@ void m_on_telemetry_device(MC_Header& header, MC_Telemetry_Device& telemetry) {
         return;
     }
     nodeNameMap.incrementTelemetryCount(header.srcnode);
-    nodeDb.setNodeTelemetryDevice(header.srcnode, telemetry.battery_level, telemetry.voltage, telemetry.has_uptime_seconds ? telemetry.uptime_seconds : 0, telemetry.has_channel_utilization ? telemetry.channel_utilization : 0);
+    nodeDb.setNodeTelemetryDevice(header.srcnode, telemetry.battery_level, telemetry.voltage, telemetry.has_uptime_seconds ? telemetry.uptime_seconds : 0, telemetry.has_channel_utilization ? telemetry.channel_utilization : 0, header.chan_hash);
     safe_printf("Telemetry Device from node 0x%08" PRIx32 ": Battery: %d, Uptime: %d, Voltage: %d, Channel Utilization: %d\n", header.srcnode, telemetry.battery_level, telemetry.uptime_seconds, telemetry.voltage, telemetry.channel_utilization);
 }
 void m_on_telemetry_environment(MC_Header& header, MC_Telemetry_Environment& telemetry) {
@@ -209,7 +209,7 @@ void m_on_telemetry_environment(MC_Header& header, MC_Telemetry_Environment& tel
     }
     nodeNameMap.incrementTelemetryCount(header.srcnode);
     safe_printf("Telemetry Environment from node 0x%08" PRIx32 ": Temperature: %d, Humidity: %d, Pressure: %d, Lux: %d\n", header.srcnode, telemetry.temperature, telemetry.humidity, telemetry.pressure, telemetry.lux);
-    nodeDb.setNodeTemperature(header.srcnode, telemetry.temperature);
+    nodeDb.setNodeTemperature(header.srcnode, telemetry.temperature, header.chan_hash);
 }
 
 void m_on_traceroute(MC_Header& header, MC_RouteDiscovery& route, bool for_me, bool is_reply, bool need_reply) {
